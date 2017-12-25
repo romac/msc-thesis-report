@@ -1,0 +1,105 @@
+%%%
+%
+% lstscala.sty
+%
+% Listings style for the Scala language.
+%
+% To use the macros defined in this file, add the following line to
+% the preamble of a LaTeX document:
+%
+%   \uspackage{lstscala}
+%
+% The package provides the listing definitions for the Scala language
+% (`Scala`), as well as two styles, `scala-plain' and `scala-color'.
+% For convenience, the package also defines two environments for Scala
+% listisngs, `lstscala' for plain Scala listings and `lstscalac' for
+% colored Scala listings.  You can use them as follows:
+%
+%   \begin{lstscala}
+%     // code listing goes here...
+%     val x = 1
+%   \end{lstscala}
+%
+% To use plain Scala style by default in all listings, add the
+% following line to the preamble of your document:
+%
+%   \lstset{style=scala-plain}
+%
+%
+% Author: Sandro Stucki <sandro.stucki@gmail.com>
+%
+%
+\NeedsTeXFormat{LaTeX2e}
+\ProvidesPackage{lstscala}%
+  [2013/05/01 LaTeX package defining a Scala profile listings]
+
+
+%%% Package dependencies %%%
+
+\RequirePackage{listings}  % Basic support for listings
+\RequirePackage{xcolor}    % Support for colors
+
+
+%%% Listing language definition %%%
+
+% Scala language definition.
+\lstdefinelanguage{Scala}{%
+  morekeywords={%
+    abstract,%
+    case,catch,char,class,%
+    def,else,extends,final,finally,for,%
+    if,import,implicit,%
+    match,module,%
+    new,null,%
+    object,override,%
+    package,private,protected,public,%
+    for,public,return,super,sealed,%
+    this,throw,trait,try,type,%
+    val,var,%
+    with,while,%
+    yield%
+  },%
+  sensitive,%
+  morecomment=[l]//,%
+  morecomment=[s]{/*}{*/},%
+  morestring=[b]",%
+  morestring=[b]',%
+  showstringspaces=false%
+}[keywords,comments,strings]%
+
+% Basic style -- no color.
+\lstdefinestyle{scala-plain}{%
+  language=Scala,%
+% columns=[c]fixed,%
+% basewidth={0.5em, 0.40em},%
+  mathescape=true,%
+  aboveskip=1em,
+  belowskip=1em,
+% lineskip=-0.2pt,
+% basewidth={0.54em, 0.4em},%
+% xleftmargin=0.5cm,%
+  basicstyle=\ttfamily,%
+  keywordstyle=\bfseries%
+}
+
+% Colors for colored style.
+\definecolor{lstscalabg}{rgb}{0.95,0.95,1}  % background (gray)
+\definecolor{lstscalastr}{rgb}{0.6,0,0}        % strings (red)
+\definecolor{lstscalacmt}{rgb}{0.25,0.5,0.35}  % comments (green)
+\definecolor{lstscalakw}{rgb}{0.5,0,0.35}      % keywords (purple)
+\definecolor{lstscaladoc}{rgb}{0.25,0.35,0.75} % scaladoc (blue)
+
+% Colored Scala style.
+\lstdefinestyle{scala-color}{%
+  style=scala-plain,%
+%  backgroundcolor=\color{lstscalabg},
+  keywordstyle=\color{lstscalakw}\bfseries,
+  stringstyle=\color{lstscalastr},
+  commentstyle=\color{lstscalacmt},
+  morecomment=[s][\color{lstscaladoc}]{/**}{*/},
+}
+
+
+%%% Environments for Scala listings.
+\lstnewenvironment{lstscala}{\lstset{style=scala-plain}}{}
+\lstnewenvironment{lstscalac}{\lstset{style=scala-color}}{}
