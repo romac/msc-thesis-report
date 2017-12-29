@@ -1,300 +1,21 @@
-\documentclass[a4paper,twoside]{article}
-\usepackage[a4paper]{geometry}
-
-% \usepackage[a4paper,showframe]{geometry} % add showframe for debug
-% \usepackage{titleps}
-
-\usepackage[pagestyles]{titlesec}
-\usepackage[all]{nowidow} % avoid orphan lines
-
-% Extra colours; need to be first
-\usepackage[usenames,dvipsnames,svgnames,table]{xcolor}
-
-% Basic packages
-\usepackage[utf8]{inputenc}
-\usepackage[T1]{fontenc}
-
-% Landscape mode
-\usepackage{pdflscape}
-
-% Additional font
-\usepackage{FiraMono}
-
-% Bibtex+cite
-\usepackage{cite}
-\usepackage{url}
-\usepackage[nottoc,numbib]{tocbibind}
-
-% URL
-\usepackage[
-  colorlinks=true,
-  urlcolor=blue,
-  citecolor=black,
-  linkcolor=.
-]{hyperref}
-
-% Lists
-\usepackage{scrextend}
-\addtokomafont{labelinglabel}{\sffamily}
-\usepackage[inline]{enumitem} % for enumerate* environment.
-
-% Maths & symbols
-\usepackage{mathtools}
-\usepackage{amssymb}
-\usepackage{pifont}
-
-% Mono font
-\usepackage[scaled]{beramono}
-
-% Spacing
-\usepackage{xspace}
-
-% Graphics
-\usepackage{graphicx}
-
-% Table
-\usepackage{booktabs}
-\usepackage{tabularx}
-\usepackage{multirow}
-
-% Floating placement
-\usepackage{placeins}
-% use \FloatBarrier before a \section to ensure all floating are displayed
-% before the new section
-
-% Caption styling
-\usepackage[justification=centering]{caption}
-
-% Additional colours
-\definecolor{c1}{HTML}{006C71}
-\definecolor{c2}{HTML}{005155}
-\definecolor{c3}{HTML}{FF8928}
-\definecolor{c4}{HTML}{E86900}
-\colorlet{ImportantCode}{ForestGreen}
-\colorlet{ImportantCode2}{RubineRed}
-\colorlet{ImportantCode3}{RedOrange}
-
-% TIKZ & related packages/settings
-\usepackage{tikz}
-\usepackage{pgfplots}
-\usetikzlibrary{shapes,fit,backgrounds,arrows,positioning,chains,patterns}
-% \pgfplotsset{compat = 1.14}
-
-% for caching tikz pictures
-% \usetikzlibrary{external}
-% \tikzexternalize[prefix=tikz-figures/]
-% \pgfrealjobname{tikz}
-
-
-% Listings
-\usepackage{listings,multicol}
-\usepackage{lstscala}
-
-
-\lstdefinelanguage{PureScala}{ % Using `Scala` result in a infinite recursion
-  style=scala-color,
-  morekeywords={[2]Unit,Boolean,Byte,Int,BigInt,String,Char,true,false},
-  %keywordstyle={[2]\color{blue!30!darkgray}\bfseries}
-}
-
-\newcommand{\Inline}[1]{\lstinline[basicstyle=\ttfamily,columns=fixed]|#1|}
-\newcommand{\InlineS}[1]{\lstinline[language=PureScala,columns=fixed]|#1|}
-% %\newcommand{\inlineScala}[1]{\lstinline[language=MyScala,breaklines=true,breakatwhitespace=true]|#1|}
-
-% Use code in description item, Based on http://tex.stackexchange.com/a/181325/77356
-\newcommand*{\lstitem}[1]{
-  \setbox0\hbox{\textbf{\Inline{#1}}}
-  \item[\usebox0]
-}
-
-% %\lstset{aboveskip=5pt,belowskip=10pt}
-% \lstset{captionpos=b,abovecaptionskip=1em}
-
-% For long listings
-\lstdefinestyle{LongCode}{
-  %aboveskip=1ex,
-  % basicstyle=\small\ttfamily,
-  basicstyle=\scriptsize\ttfamily,
-  % basicstyle=\tiny\ttfamily,
-  %belowskip=1ex,
-  breaklines=true,
-  postbreak=\raisebox{0ex}[0ex][0ex]{\ensuremath{\color{red}\hookrightarrow}},
-  breakautoindent=false,
-  %breakatwhitespace=false,
-  %columns=fullflexible,
-  multicols=2,
-  framerule=0pt,
-  framexrightmargin=0em,
-  framexleftmargin=0em,
-  % numbers=left,
-  % numberstyle=\footnotesize\sffamily,
-  tabsize=2
-}
-
-
-% Env for short code: no label, no caption and "inlined" with a box
-\lstnewenvironment{ShortCode}[1]
-    {
-      \lstset{
-        language=#1,
-        frame=trBL % box the frame & double line on bottom and left side
-      }
-    }
-    {
-    }
-
-% Env for longer code: label, caption and "floating" with a box
-\lstnewenvironment{Code}[3]
-    {
-      \lstset{
-        language=#1,
-        label={#2},
-        caption=#3,
-        captionpos=b, % bottom
-        float=!h,     % "here"
-        frame=trBL,   % box the frame & double line on bottom and left side
-        % frameround=tttt
-      }
-    }
-    {
-      % DEBUG:
-      % 1: #1 \\
-      % 2: #2 \\
-      % 3: #3
-    }
-
-
-
-% Tables
-% \newcommand{\heading}[1]{\multicolumn{1}{c}{\textbf{#1}}}
-% \newcommand{\vheading}[1]{\rotatebox[origin=c]{90}{~\textbf{#1}~}}
-
-
-% To centre table too wide
-% credit: http://tex.stackexchange.com/a/27099/77356
-\makeatletter
-\newcommand*{\centerfloat}{%
-  \parindent \z@
-  \leftskip \z@ \@plus 1fil \@minus \textwidth
-  \rightskip\leftskip
-  \parfillskip \z@skip}
-\makeatother
-
-
-% General styling
-%\let\oldsection\section
-%\renewcommand\section{\cleardoublepage\oldsection}
-
-% For some reason page margin are swapped when having a title page with a
-% different geometry. We fix that manually by 1) swapping the margin and
-% 2) swapping the page number position (page style)
-% credit: http://tex.stackexchange.com/a/36016/77356
-\makeatletter
-\newcommand*{\flipmargins}{%
-  \clearpage
-  \setlength{\@tempdima}{\oddsidemargin}%
-  \setlength{\oddsidemargin}{\evensidemargin}%
-  \setlength{\evensidemargin}{\@tempdima}%
-  \if@reversemargin
-    \normalmarginpar
-  \else
-    \reversemarginpar
-  \fi
-}
-\makeatother
-
-\newpagestyle{mystyle_no_header}{
-  \setfoot[\thepage][][]{}{}{\thepage}
-}
-
-\newpagestyle{mystyle}{
-  % \sethead[][][\firsttitlemarks\ifthesubsection{\thesubsection~\subsectiontitle}{\thesection~\sectiontitle}]{\firsttitlemarks\ifthesubsection{\thesubsection~\subsectiontitle}{\thesection~\sectiontitle}}{}{}
-  \sethead[\thesection~\sectiontitle][][]{}{}{\thesection~\sectiontitle}
-  % \setfoot[][][\thepage]{\thepage}{}{}
-  \setfoot[\thepage][][]{}{}{\thepage}
-}
-
-% Additional macros
-\newcommand{\TODO}[1]{\textcolor{YellowOrange}{(#1)}} % for inline TODO
-% \newcommand{\TODO}[1]{\underline{(#1)}} % for inline TODO, PRINTING
-\newcommand{\GenC}{\emph{GenC}\xspace}
-\newcommand{\URL}[2]{#2:\xspace\href{#1}{#1}}
-\newcommand{\RefSec}[1]{Section~\ref{#1}}
-\newcommand{\RefTable}[1]{Table~\ref{#1}}
-\newcommand{\RefApp}[1]{Appendix~\ref{#1}}
-\newcommand{\RefFig}[1]{Figure~\ref{#1}}
-\newcommand{\RefCode}[1]{Listing~\ref{#1}}
-\newcommand{\BigO}[1]{\mathcal{O}(#1)}
-
-
-
-
-%%%
-
-\title{Verification of complex systems in Stainless}
-
-\date{
-  {\small Version 0.1}\\
-  December 2017
-}
-
-\author{Romain Ruetschi}
-
-\begin{document}
-
-\newgeometry{centering}
-\pagenumbering{gobble}
-\maketitle
-
-\vfill
-
-\begin{abstract}
-
-TODO
-
-\end{abstract}
-
-\vfill
-
-\begin{center}
-    Master Thesis Project under the supervision of \\
-    Prof. Viktor Kuncak \& Dr. Jad Hamza \\
-    Lab for Automated Reasoning and Analysis LARA - EPFL
-\end{center}
-
-\begin{center}
-    \includegraphics[width = 40mm]{res/epfl-logo}
-\end{center}
-
-\clearpage\null\newpage
-
-
-\restoregeometry              %% restore the layout
-\flipmargins
-\pagestyle{mystyle_no_header}
-\pagenumbering{arabic}
-
-\tableofcontents
-% \lstlistoflistings
-
+\include{header}
 
 \clearpage
 \pagestyle{mystyle}
 
 \section{Introduction}
 
-TODO
+\TODO{Introduction}
 
 \subsection*{Related Works}
 
-TODO
+\TODO{Related Works}
 
-\clearpage
 \section{Motivation}
 \label{motivation}
 
 
-TODO
+\TODO{Motivation}
 
 \clearpage
 \section{Verifiying Actor Systems}
@@ -302,21 +23,47 @@ TODO
 
 \subsection{The Actor Model}
 
-TODO
+\TODO{Actor Model}
+
+\cite{actario}
 
 \subsubsection{Message}
 
-In our framework, messages are modelled as concrete subclasses of the abstract class 
-\InlineS{Msg}.
+In our framework, messages are modelled as instances of the \InlineS{Msg} trait.
+
+\begin{ShortCode}{PureScala}
+abstract class Msg
+\end{ShortCode}
 
 \subsubsection{Actor Reference}
 
-An actor can be referenced by its \InlineS{ActorRef}.
+Each actor is associated with a unique and persistent reference, modelled as an instance
+of the \ActorRef trait.
 
-\subsubsection{Message in Flight}
+\begin{ShortCode}{PureScala}
+abstract class ActorRef
+\end{ShortCode}
 
-In-flight messages are represented as a product type of the destination \InlineS{ActorRef} 
-and the \InlineS{Msg}.
+\subsubsection{In-flight Messages}
+
+In-flight messages are represented as a product of the \ActorRef of the destination actor,
+and the message itself.
+
+\begin{ShortCode}{PureScala}
+case class Packet(dest: ActorRef, payload: Msg)
+\end{ShortCode}
+
+\subsubsection{Actor Context}
+
+When a message is delivered to an actor, the latter is provided with a context,
+which holds a reference to itself, and a mutable list of \InlineS{Packet}s to send.
+
+\begin{ShortCode}{PureScala}
+case class ActorContext(
+  self: ActorRef,
+  var toSend: List[Packet]
+)
+\end{ShortCode}
 
 \subsubsection{Behavior}
 
@@ -325,40 +72,26 @@ process the next incoming message. In our framework, these are modelled as a sub
 of the abstract class \InlineS{Behavior}, which defines a single abstract method 
 \InlineS{processMsg}, to be overriden for each defined behavior.
 
-\begin{Code}{PureScala}{lst:Behavior}{Behavior in PureScala}
-abstract class Msg
+Using the provided \InlineS{ActorContext}, the implementation of the \InlineS{processMsg}
+method can both access its own reference, and register messages to be sent after the
+execution of the method is complete. It is also required to return a new \InlineS{Behavior}
 
-abstract class ActorRef {
-  def !(msg: Msg)(implicit ctx: ActorContext): Unit = {
-    ctx.send(this, msg)
-  }
-}
-
-case class Packet(dest: ActorRef, payload: Msg)
-
-case class ActorContext(
-  self: ActorRef,
-  var toSend: List[Packet]
-) {
-  def send(to: ActorRef, msg: Msg): Unit = {
-    toSend = toSend :+ Packet(to, msg)
-  }
-}
-
+\begin{ShortCode}{PureScala}
 abstract class Behavior {
   def processMsg(msg: Msg)(implicit ctx: ActorContext): Behavior
 }
-\end{Code}
-
-\subsubsection{Actor Context}
-
-As mentioned above, when a message is delivered to an actor, the latter is provided with
-a context, which holds a reference to itself, as well as a list of \InlineS{Packet}s 
-to send.
+\end{ShortCode}
 
 \subsubsection{Transition}
 
-\begin{Code}{PureScala}{lst:ActorSystem}{Transition in PureScala}
+Whenever a message is processed, we record the transition between the previous 
+state of the system and the one after the message has been been processed. We keep 
+track of this information as an instance of the \InlineS{Transition} class, which 
+holds: the \InlineS{Msg} that has been delivered, its sender and receiver, the new 
+behavior of the destination actor, and the list of \InlineS{Packet}s the destination 
+actor wants to send.
+
+\begin{ShortCode}{PureScala}
 case class Transition(
   from: ActorRef,
   to: ActorRef,
@@ -366,53 +99,158 @@ case class Transition(
   newBehavior: Behavior,
   toSend: List[Packet]
 )
-\end{Code}
+\end{ShortCode}
 
 \subsubsection{Actor System}
 
+The state of the Actor system at a given point in time is modelled as a case class, 
+holding the behavior associated with each actor reference, the list of in-flight messages 
+between any two actors, as well as a trace of the execution up to that point, 
+modelled as a list of \InlineS{Transition}s.
 
-\begin{Code}{PureScala}{lst:ActorSystem}{Actor System in PureScala}
+\begin{ShortCode}{PureScala}
 case class ActorSystem(
   behaviors: CMap[ActorRef, Behavior],
   inboxes: CMap[(ActorRef, ActorRef), List[Msg]],
   trace: List[Transition]
-) {
-  def step(from: ActorRef, to: ActorRef): ActorSystem = /* ... */
-}
-\end{Code}
+)
+\end{ShortCode}
 
+The \InlineS{ActorSystem} class is equipped with a \InlineS{step} method, which takes 
+a pair of \ActorRef as arguments, and is in charge of delivering the oldest message 
+found in the corresponding inbox, and which returns the new state of the system after 
+the aforementioned message has been processed.
+
+\begin{ShortCode}{PureScala}
+def step(from: ActorRef, to: ActorRef): ActorSystem
+\end{ShortCode}
+
+\subsection{Operational Semantics}
+\label{semantics}
+
+We formulate the small-step operational semantics of our Actor model in \RefFig{fig:opsem}.
+
+\TODO{Operational semantics}
+
+\begin{figure}[!h]
+\label{fig:opsem}
+\begin{framed}
+ 
+\begin{equation}
+\dfrac{
+  \not\exists m \in \stt{s.inboxes}(n_{from}, n_{to})
+}{
+  \langle \stt{s.step}(n_{from}, n_{to}) \rangle \longrightarrow \stt{s}
+}
+\tag{STEP-NOMSG}
+\end{equation}
+\vspace{10pt}
+\begin{equation}
+\dfrac{
+  \exists m \in \stt{s.inboxes}(n_{from}, n_{to}) \qquad
+  \langle \stt{s.deliverMsg}(n_{to}, n_{from}, m) \rangle \Rightarrow (b, ps, t)
+}{
+  \langle \stt{s.step}(n_{from}, n_{to}) \rangle \longrightarrow s \uplus (n_{to} \mapsto b, \ldots, t)
+}
+\tag{STEP}
+\end{equation}
+\vspace{10pt}
+\begin{equation}
+\dfrac{
+  \langle \stt{s.behaviors($n_{to}$).processMsg}(m, \emptyset_{n_{to}}) \rangle \longrightarrow (b, c) 
+}{
+   \langle \stt{s.deliverMsg}(n_{to}, n_{from}, m) \rangle \longrightarrow (b, \stt{c.toSend}, t)
+}
+\tag{DELIVER-MSG}
+\end{equation}
+\vspace{10pt}
+\begin{equation}
+\dfrac{
+  \langle \stt{s.behaviors($n_{to}$).processMsg}(m, \emptyset_{n_{to}}) \rangle \longrightarrow (b, c) 
+}{
+   \langle \stt{s.deliverMsg}(n_{to}, n_{from}, m) \rangle \longrightarrow (b, \stt{c.toSend}, t)
+}
+\tag{DELIVER-MSG}
+\end{equation}
+\vspace{10pt}
+\begin{equation}
+\dfrac{
+  \stt{b.processMsg}(m, \emptyset_{n_{to}}) = [i_1, \ldots, i_n, b'] \qquad
+  \emptyset_{n_{to}} \vdash \langle [i_1, \ldots, i_n] \rangle \Rightarrow c
+}{
+   \langle \stt{b.processMsg}(m, \emptyset_{n_{to}}) \rangle \longrightarrow (b', c)
+}
+\tag{PROCESS-MSG}
+\end{equation}
+\vspace{10pt}
+\begin{equation}
+\dfrac{\empty}{
+   \langle Nil, c \rangle \Rightarrow c
+}
+\tag{I-NIL}
+\end{equation}
+\vspace{10pt}
+\begin{equation}
+\dfrac{
+  \langle i, c \rangle \Rightarrow c'
+}{
+  \langle i :: is, c \rangle \Rightarrow \langle is, c' \rangle
+}
+\tag{I-CONS}
+\end{equation}
+
+\vspace{10pt}
+\begin{equation}
+\dfrac{
+  \langle [i_1, \ldots, i_n], \emptyset_{n_{to}} \rangle \Rightarrow c
+}{
+   \langle \stt{n ! m}, c \rangle \Rightarrow (b',\ \stt{c.copy(toSend $\mapsto$ (n, m) :: c.toSend)})
+}
+\tag{I-SEND}
+\end{equation}
+
+\end{framed}
+\vspace{-10pt}
+\caption{Operational semantics}
+\end{figure}
+
+$$\emptyset_n := \stt{ActorContext}(n, \emptyset)$$
 
 \subsection{Proving Invariants}
 \label{invariants}
 
-TODO
+After defining an Actor system with our framework, one might want to verify that this 
+system preserves some invariant between each step of its execution.
 
 \subsection{Reasoning About Traces}
 \label{traces}
 
+\TODO{Traces}
 
-TODO
+\subsection{Executing an Actor System with Akka}
+\label{traces}
 
-\clearpage
+\section{Strong Eventual Consistency with CRDTs}
+\label{crdt}
+
+\TODO{CRDTs}
+
 \section{Biparty Communication Protocols}
 \label{biparty}
 
+\TODO{Bipart}
 
-TODO
-
-\clearpage
 \section{Conclusion}
 \label{conclusion}
 
-TODO
+\TODO{Conclusion}
 
-\clearpage
-\section{Future Works}
-\label{future_works}
+\section{Future Work}
+\label{futurework}
 
 \appendix
 
-TODO
+\TODO{Future Work}
 
 \clearpage
 
