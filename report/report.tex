@@ -128,12 +128,18 @@ def step(from: ActorRef, to: ActorRef): ActorSystem
 \subsection{Operational Semantics}
 \label{semantics}
 
-We formulate the small-step operational semantics of our Actor model in \RefFig{fig:opsem}.
-
-\TODO{Operational semantics}
+We formulate the small-step operational semantics of our Actor model in 
+\RefFig{fig:opsem}, where $s: \stt{ActorSystem}$ is an Actor system,
+$m: \stt{Msg}$ is a message,
+$n, n_{to}, n_{from}: \stt{ActorRef}$ are references,
+$b, b': \stt{Behavior}$ are behaviors,
+$ps: \stt{List[Packet]}$ a list of packets to send,
+$t: \stt{Transition}$ is a transition,
+$c: \stt{ActorContext}$ is a context,
+and $\emptyset_n: \stt{ActorContext}$ is the empty context for an actor whose
+self-reference is $n$, defined as $\emptyset_n := \stt{ActorContext}(n, \stt{Nil})$.
 
 \begin{figure}[!h]
-\label{fig:opsem}
 \begin{framed}
  
 \begin{equation}
@@ -205,10 +211,8 @@ We formulate the small-step operational semantics of our Actor model in \RefFig{
 
 \end{framed}
 \vspace{-10pt}
-\caption{Operational semantics}
+\caption{Operational semantics\label{fig:opsem}}
 \end{figure}
-
-$$\emptyset_n := \stt{ActorContext}(n, \emptyset)$$
 
 \subsection{Proving Invariants}
 \label{invariants}
@@ -216,21 +220,176 @@ $$\emptyset_n := \stt{ActorContext}(n, \emptyset)$$
 After having defined an Actor system with our framework, one might want to verify that this 
 system preserves some invariant between each step of its execution. That is to say, 
 for an \InlineS{ActorSystem} $s$, any two \ActorRef $n, m$,
-and an invariant \InlineS{inv: ActorSystem $\ \to\ $ Boolean}:
+and an invariant \InlineS{inv: ActorSystem $\ \to\ $ Boolean}, if $\texttt{inv}(s)$ holds, 
+then $\texttt{inv}(s\texttt{.step}(n, m))$ should hold as well. We express this 
+property more formally in \RefFig{fig:stepinvariant}.
 
-\begin{equation}
-\dfrac{
-  \stt{inv($s$)}
-}{
-   \stt{inv($s$.step($n, m$))}
+\begin{figure}[!h]
+$$\forall s: \texttt{ActorSystem},\, n: \texttt{ActorRef},\, m: \texttt{ActorRef}.\ \texttt{inv($s$)} \implies \texttt{inv($s$.step($n, m$))}$$
+\vspace{-20pt}
+\caption{Invariant preservation property\label{fig:stepinvariant}}
+\end{figure}
+
+This property can be trivially expressed in PureScala as:
+
+\begin{ShortCode}{PureScala}
+def inv(s: ActorSystem): Boolean = {
+  /* ... */
 }
-\tag{PRESERVE-INV}
-\end{equation}
+
+def preserveInv(s: ActorSystem, n: ActorRef, m: ActorRef): Boolean = {
+  require(inv(s))
+  inv(s.step(n, m))
+} holds
+\end{ShortCode}
+
+When encoutering such a definition, Stainless will generate a verification condition 
+equivalent to \RefFig{fig:stepinvariant}, which will then be discharged to Inox and the
+underlying SMT solver.
 
 \subsection{Reasoning About Traces}
 \label{traces}
 
 \TODO{Traces}
+
+\subsection{Case studies}
+\label{casestudies}
+
+\subsubsection*{Replicated Counter (increment)}
+
+As a first and very simple case study, we will study an Actor system which models a
+replicated counter, which can only be incremented by one unit. This system is 
+composed of two actors, a primary counter whose reference is \texttt{Primary()},
+and a backup counter whose reference is \texttt{Backup()}.
+Each of these reference is associated with a behavior: the primary counter reference with
+an instance of \texttt{PrimaryB}, and the backup counter reference with an instance 
+of \texttt{BackupB}, both of which hold a positive integer, representing the value of the
+counter. Whenever the primary actor receives a message \texttt{Inc()}, it forwards that
+message to the backup actor, and returns a new instance of \texttt{PrimaryB} with the
+counter incremented by one. When the backup actor receives an \texttt{Inc()} message,
+it just returns a new instance of \texttt{BackupB} with the counter incremented by one. 
+The corresponding PureScala implementation can be found
+in \RefCode{lst:ReplicatedCounterInc}.
+
+\begin{Code}{PureScala}{lst:ReplicatedCounterInc}{Replicated counter implementation (increment)}
+case class Primary() extends ActorRef
+case class Backup()  extends ActorRef
+
+case class Inc() extends Msg
+
+case class PrimaryB(counter: BigInt) extends Behavior {
+  require(counter >= 0)
+  def processMsg(msg: Msg)(implicit ctx: ActorContext): Behavior = msg match {
+    case Inc() =>
+      Backup() ! Inc()
+      PrimaryB(counter + 1)
+  }
+}
+
+case class BackupB(counter: BigInt) extends Behavior {
+  require(counter >= 0)
+  def processMsg(msg: Msg)(implicit ctx: ActorContext): Behavior = msg match {
+    case Inc() => BackupB(counter + 1)
+  }
+}
+\end{Code}
+
+An interesting invariant of the system we might want to verify is preserved at each 
+step, is 
+
+\subsubsection*{Replicated Counter (deliver)}
+
+\begin{Code}{PureScala}{lst:ReplicatedCounterDel}{Replicated counter implementation (deliver)}
+case class Primary() extends ActorRef
+case class Backup()  extends ActorRef
+
+case class Inc() extends Msg
+case class Deliver(c: BigInt) extends Msg
+
+case class PrimaryB(counter: BigInt) extends Behavior {
+  def processMsg(msg: Msg)(implicit ctx: ActorContext): Behavior = msg match {
+    case Inc() =>
+      Backup() ! Deliver(counter + 1)
+      PrimaryB(counter + 1)
+
+    case _ => Behavior.same
+  }
+}
+
+case class BackupB(counter: BigInt) extends Behavior {
+  def processMsg(msg: Msg)(implicit ctx: ActorContext): Behavior = msg match {
+    case Deliver(c) => BackupB(c)
+    case _          => Behavior.same
+  }
+}
+\end{Code}
+
+\subsubsection*{Lock Service}
+
+\RefCode{lst:ReplicatedCounterDel}
+
+\begin{Code}{PureScala}{lst:ReplicatedCounterDel}{Replicated counter implementation (deliver)}
+case class Server() extends ActorRef
+object Server {
+  case class Lock(agent: ActorRef) extends Msg
+  case class Unlock(agent: ActorRef) extends Msg
+}
+
+case class Agent(id: BigInt) extends ActorRef
+object Agent {
+  case object Lock extends Msg
+  case object Unlock extends Msg
+  case object Grant extends Msg
+}
+
+// The head of `agents` holds the lock, the tail are waiting for the lock
+case class ServerB(agents: List[ActorRef]) extends Behavior {
+  def isLocked: Boolean = agents.nonEmpty
+
+  def processMsg(msg: Msg)(implicit ctx: ActorContext): Behavior = msg match {
+    case Server.Lock(agent) if agents.isEmpty =>
+      agent ! Agent.Grant
+      ServerB(List(agent))
+
+    case Server.Lock(agent) =>
+      ServerB(agents :+ agent)
+
+    case Server.Unlock(agent) if agents.nonEmpty =>
+      val newAgents = agents.tail
+      if (newAgents.nonEmpty) newAgents.head ! Agent.Grant
+      ServerB(newAgents)
+
+    case _ =>
+      Behavior.same
+  }
+}
+
+case class AgentB(holdsLock: Boolean) extends Behavior {
+  def processMsg(msg: Msg)(implicit ctx: ActorContext): Behavior = msg match {
+    case Agent.Lock =>
+      Server() ! Server.Lock(ctx.self)
+      Behavior.same
+
+    case Agent.Unlock if holdsLock =>
+      Server() ! Server.Unlock(ctx.self)
+      AgentB(false)
+
+    case Agent.Grant =>
+      AgentB(true)
+
+    case _ =>
+      Behavior.same
+  }
+}
+\end{Code}
+
+\subsubsection*{Leader Election}
+
+\TODO{Leader election}
+
+\subsubsection*{Key-value store}
+
+\TODO{KV store}
 
 \subsection{Executing an Actor System with Akka}
 \label{traces}
