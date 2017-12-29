@@ -78,7 +78,7 @@
         <attribute name="showlogwarningitems" type="bool">0</attribute>
         <attribute name="showloginfoitems" type="bool">0</attribute>
         <attribute name="showlogerroritems" type="bool">1</attribute>
-        <attribute name="pdfviewscrollrect" type="string">{{144.10189514754174, 1812.1306814475824}, {428.68668807590586, 577.06558011138759}}</attribute>
+        <attribute name="pdfviewscrollrect" type="string">{{68.431950207051671, 4468.4747486192273}, {428.68668807590592, 577.06558011138713}}</attribute>
         <attribute name="showpdfthumbnails" type="bool">0</attribute>
         <attribute name="selectedcontrolstab" type="int16">6</attribute>
         <attribute name="maxoutlinedepth" type="int16">7</attribute>
@@ -124,12 +124,12 @@
     </object>
     <object type="TEXFILE" id="z107">
         <attribute name="wasopen" type="bool">0</attribute>
-        <attribute name="visiblerect" type="string">{{75, 2633}, {746.5, 701.5}}</attribute>
-        <attribute name="lasteditdate" type="date">536262018.20586401224136352539</attribute>
+        <attribute name="visiblerect" type="string">{{7, 2524}, {746.5, 701.5}}</attribute>
+        <attribute name="lasteditdate" type="date">536263169.34699302911758422852</attribute>
         <attribute name="istext" type="bool">1</attribute>
-        <attribute name="fileloaddate" type="date">536262019.14710801839828491211</attribute>
+        <attribute name="fileloaddate" type="date">536263169.53890097141265869141</attribute>
         <attribute name="extension" type="string">tex</attribute>
-        <attribute name="cursor" type="string">{5649, 0}</attribute>
+        <attribute name="cursor" type="string">{5435, 0}</attribute>
         <attribute name="sortindex" type="int32">1</attribute>
         <attribute name="name" type="string">report.tex</attribute>
         <attribute name="isexpanded" type="bool">0</attribute>

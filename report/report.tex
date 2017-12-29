@@ -138,73 +138,67 @@ We formulate the small-step operational semantics of our Actor model in \RefFig{
  
 \begin{equation}
 \dfrac{
-  \not\exists m \in \stt{s.inboxes}(n_{from}, n_{to})
+  \not\exists m \in \stt{$s$.inboxes}(n_{from}, n_{to})
 }{
-  \langle \stt{s.step}(n_{from}, n_{to}) \rangle \longrightarrow \stt{s}
+  \langle \stt{$s$.step}(n_{from}, n_{to}) \rangle \longrightarrow \stt{s}
 }
 \tag{STEP-NOMSG}
 \end{equation}
+
 \vspace{10pt}
 \begin{equation}
 \dfrac{
-  \exists m \in \stt{s.inboxes}(n_{from}, n_{to}) \qquad
-  \langle \stt{s.deliverMsg}(n_{to}, n_{from}, m) \rangle \Rightarrow (b, ps, t)
+  \exists m \in \stt{$s$.inboxes}(n_{from}, n_{to}) \qquad
+  \langle \stt{$s$.deliverMsg}(n_{to}, n_{from}, m) \rangle \Rightarrow (b, ps, t)
 }{
-  \langle \stt{s.step}(n_{from}, n_{to}) \rangle \longrightarrow s \uplus (n_{to} \mapsto b, \ldots, t)
+  \langle \stt{$s$.step}(n_{from}, n_{to}) \rangle \longrightarrow s \uplus (n_{to} \mapsto b, \ldots, t)
 }
 \tag{STEP}
 \end{equation}
+
 \vspace{10pt}
 \begin{equation}
 \dfrac{
-  \langle \stt{s.behaviors($n_{to}$).processMsg}(m, \emptyset_{n_{to}}) \rangle \longrightarrow (b, c) 
+  \langle \stt{$s$.behaviors($n_{to}$).processMsg}(m, \emptyset_{n_{to}}) \rangle \longrightarrow (b, c) 
 }{
-   \langle \stt{s.deliverMsg}(n_{to}, n_{from}, m) \rangle \longrightarrow (b, \stt{c.toSend}, t)
+   \langle \stt{$s$.deliverMsg}(n_{to}, n_{from}, m) \rangle \longrightarrow (b, \stt{$c$.toSend}, t)
 }
 \tag{DELIVER-MSG}
 \end{equation}
+
 \vspace{10pt}
 \begin{equation}
 \dfrac{
-  \langle \stt{s.behaviors($n_{to}$).processMsg}(m, \emptyset_{n_{to}}) \rangle \longrightarrow (b, c) 
-}{
-   \langle \stt{s.deliverMsg}(n_{to}, n_{from}, m) \rangle \longrightarrow (b, \stt{c.toSend}, t)
-}
-\tag{DELIVER-MSG}
-\end{equation}
-\vspace{10pt}
-\begin{equation}
-\dfrac{
-  \stt{b.processMsg}(m, \emptyset_{n_{to}}) = [i_1, \ldots, i_n, b'] \qquad
+  \stt{$b$.processMsg}(m, \emptyset_{n_{to}}) = [i_1, \ldots, i_n, b'] \qquad
   \emptyset_{n_{to}} \vdash \langle [i_1, \ldots, i_n] \rangle \Rightarrow c
 }{
-   \langle \stt{b.processMsg}(m, \emptyset_{n_{to}}) \rangle \longrightarrow (b', c)
+   \langle \stt{$b$.processMsg}(m, \emptyset_{n_{to}}) \rangle \longrightarrow (b', c)
 }
 \tag{PROCESS-MSG}
 \end{equation}
+
 \vspace{10pt}
 \begin{equation}
 \dfrac{\empty}{
-   \langle Nil, c \rangle \Rightarrow c
+   \langle \stt{Nil}, c \rangle \Rightarrow c
 }
 \tag{I-NIL}
 \end{equation}
+
 \vspace{10pt}
 \begin{equation}
 \dfrac{
   \langle i, c \rangle \Rightarrow c'
 }{
-  \langle i :: is, c \rangle \Rightarrow \langle is, c' \rangle
+  \langle \stt{$i$ :: $is$}, c \rangle \Rightarrow \langle is, c' \rangle
 }
 \tag{I-CONS}
 \end{equation}
 
 \vspace{10pt}
 \begin{equation}
-\dfrac{
-  \langle [i_1, \ldots, i_n], \emptyset_{n_{to}} \rangle \Rightarrow c
-}{
-   \langle \stt{n ! m}, c \rangle \Rightarrow (b',\ \stt{c.copy(toSend $\mapsto$ (n, m) :: c.toSend)})
+\dfrac{\empty}{
+   \langle n\ \stt{!}\ m, c \rangle \Rightarrow (b',\ \stt{$c$.copy(toSend $\mapsto$ ($n, m$) :: $c$.toSend)})
 }
 \tag{I-SEND}
 \end{equation}
@@ -219,8 +213,19 @@ $$\emptyset_n := \stt{ActorContext}(n, \emptyset)$$
 \subsection{Proving Invariants}
 \label{invariants}
 
-After defining an Actor system with our framework, one might want to verify that this 
-system preserves some invariant between each step of its execution.
+After having defined an Actor system with our framework, one might want to verify that this 
+system preserves some invariant between each step of its execution. That is to say, 
+for an \InlineS{ActorSystem} $s$, any two \ActorRef $n, m$,
+and an invariant \InlineS{inv: ActorSystem $\ \to\ $ Boolean}:
+
+\begin{equation}
+\dfrac{
+  \stt{inv($s$)}
+}{
+   \stt{inv($s$.step($n, m$))}
+}
+\tag{PRESERVE-INV}
+\end{equation}
 
 \subsection{Reasoning About Traces}
 \label{traces}
