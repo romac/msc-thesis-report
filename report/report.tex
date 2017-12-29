@@ -52,18 +52,6 @@
 % Graphics
 \usepackage{graphicx}
 
-% Markdown
-%\usepackage[
-%  definitionLists=true,
-%  tightLists=false,
-%  blankBeforeCodeFence=true,
-%  fencedCode=true,
-%  footnotes=true,
-%  inlineFootnotes=true,
-%  hybrid=true
-%]{markdown}
-
-
 % Table
 \usepackage{booktabs}
 \usepackage{tabularx}
@@ -304,6 +292,110 @@ TODO
 \clearpage
 \section{Motivation}
 \label{motivation}
+
+
+TODO
+
+\clearpage
+\section{Verifiying Actor Systems}
+\label{actors}
+
+\subsection{The Actor Model}
+
+TODO
+
+\subsubsection{Message}
+
+In our framework, messages are modelled as concrete subclasses of the abstract class 
+\InlineS{Msg}.
+
+\subsubsection{Actor Reference}
+
+An actor can be referenced by its \InlineS{ActorRef}.
+
+\subsubsection{Message in Flight}
+
+In-flight messages are represented as a product type of the destination \InlineS{ActorRef} 
+and the \InlineS{Msg}.
+
+\subsubsection{Behavior}
+
+A behavior specifies both the current state of an actor, and how this one should 
+process the next incoming message. In our framework, these are modelled as a subclass 
+of the abstract class \InlineS{Behavior}, which defines a single abstract method 
+\InlineS{processMsg}, to be overriden for each defined behavior.
+
+\begin{Code}{PureScala}{lst:Behavior}{Behavior in PureScala}
+abstract class Msg
+
+abstract class ActorRef {
+  def !(msg: Msg)(implicit ctx: ActorContext): Unit = {
+    ctx.send(this, msg)
+  }
+}
+
+case class Packet(dest: ActorRef, payload: Msg)
+
+case class ActorContext(
+  self: ActorRef,
+  var toSend: List[Packet]
+) {
+  def send(to: ActorRef, msg: Msg): Unit = {
+    toSend = toSend :+ Packet(to, msg)
+  }
+}
+
+abstract class Behavior {
+  def processMsg(msg: Msg)(implicit ctx: ActorContext): Behavior
+}
+\end{Code}
+
+\subsubsection{Actor Context}
+
+As mentioned above, when a message is delivered to an actor, the latter is provided with
+a context, which holds a reference to itself, as well as a list of \InlineS{Packet}s 
+to send.
+
+\subsubsection{Transition}
+
+\begin{Code}{PureScala}{lst:ActorSystem}{Transition in PureScala}
+case class Transition(
+  from: ActorRef,
+  to: ActorRef,
+  msg: Msg,
+  newBehavior: Behavior,
+  toSend: List[Packet]
+)
+\end{Code}
+
+\subsubsection{Actor System}
+
+
+\begin{Code}{PureScala}{lst:ActorSystem}{Actor System in PureScala}
+case class ActorSystem(
+  behaviors: CMap[ActorRef, Behavior],
+  inboxes: CMap[(ActorRef, ActorRef), List[Msg]],
+  trace: List[Transition]
+) {
+  def step(from: ActorRef, to: ActorRef): ActorSystem = /* ... */
+}
+\end{Code}
+
+
+\subsection{Proving Invariants}
+\label{invariants}
+
+TODO
+
+\subsection{Reasoning About Traces}
+\label{traces}
+
+
+TODO
+
+\clearpage
+\section{Biparty Communication Protocols}
+\label{biparty}
 
 
 TODO
