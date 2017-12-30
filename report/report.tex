@@ -7,17 +7,147 @@
 
 \TODO{Introduction}
 
-\subsection*{Related Works}
-
-\TODO{Related Works}
-
-\section{Motivation}
-\label{motivation}
-
-
-\TODO{Motivation}
+%\subsection*{Related Works}
+%
+%\TODO{Related Works}
+%
+%\section{Motivation}
+%\label{motivation}
+%
+%
+%\TODO{Motivation}
+%
 
 \clearpage
+
+\section{Partial Evaluation of Inox Programs}
+\label{partial}
+
+\TODO{Describe Stainless and Inox pipeline}
+
+We now describe a partial evaluation algorithm for Inox programs.
+
+\begin{figure}
+\begin{framed}
+ 
+\begin{equation}
+\dfrac{
+  e \in \Delta
+}{
+  \lb{e}{\Delta} \longrightarrow \stt{true}
+}
+\end{equation}
+
+\begin{equation}
+\dfrac{
+  \neg e \in \Delta
+}{
+  \lb{e}{\Delta} \longrightarrow \stt{false}
+}
+\end{equation}
+
+\begin{equation}
+\dfrac{
+  \empty
+}{
+  \lb{\lambda x_1, \ldots, x_n.\, b}{\Delta} \longrightarrow \lambda \lb{x_1}{\Delta}, \ldots, \lb{x_n}{\Delta}.\, \lb{b}{\Delta}
+}
+\end{equation}
+
+\begin{equation}
+\dfrac{
+  \empty
+}{
+  \lb{\stt{$l$ ==> $r$}}{\Delta} \longrightarrow \lb{\neg l \stt{ || } r}{\Delta}
+}
+\end{equation}
+
+\begin{equation}
+\dfrac{
+  \not e \in \Delta
+}{
+  \Delta: e \longrightarrow \stt{false}
+}
+\end{equation}
+
+% TODO: Or/And
+
+\begin{equation}
+\dfrac{
+  \lb{c}{\Delta} \longrightarrow \stt{true}
+}{
+  \lb{\stt{if ($c$) $t$ else $e$}}{\Delta} \longrightarrow \lb{t}{\Delta \cup c}
+}
+\end{equation}
+
+\begin{equation}
+\dfrac{
+  \lb{c}{\Delta} \longrightarrow \stt{false}
+}{
+  \lb{\stt{if ($c$) $t$ else $e$}}{\Delta} \longrightarrow \lb{e}{\Delta \cup c}
+}
+\end{equation}
+
+\begin{equation}
+\dfrac{
+  \lb{c}{\Delta} \longrightarrow c' \qquad
+  \lb{t}{\Delta \cup c'} \longrightarrow t' \qquad
+  \lb{e}{\Delta \cup \neg c'} \longrightarrow e' \qquad
+  t' = e'
+}{
+  \lb{\stt{if ($c$) $t$ else $e$}}{\Delta} \longrightarrow t'
+}
+\end{equation}
+
+\begin{equation}
+\dfrac{
+  \lb{c}{\Delta} \longrightarrow c' \qquad
+  \lb{t}{\Delta \cup c'} \longrightarrow t' \qquad
+  \lb{e}{\Delta \cup \neg c'} \longrightarrow e' \qquad
+  t' \not= e'
+}{
+  \lb{\stt{if ($c$) $t$ else $e$}}{\Delta} \longrightarrow \stt{if ($c'$) $t'$ else $e'$}
+}
+\end{equation}
+
+\begin{equation}
+\dfrac{
+  \empty
+}{
+  \lb{\stt{$l$ ==> $r$}}{\Delta} \longrightarrow \lb{\neg l \stt{ || } r}{\Delta}
+}
+\end{equation}
+
+\begin{equation}
+\dfrac{
+  \empty
+}{
+  \lb{l \stt{ ==> } r}{\Delta} \longrightarrow \lb{\neg l \stt{ || } r}{\Delta}
+}
+\end{equation}
+
+\begin{equation}
+\dfrac{
+  \empty
+}{
+  \lb{l \stt{ ==> } r}{\Delta} \longrightarrow \lb{\neg l \stt{ || } r}{\Delta}
+}
+\end{equation}
+
+\begin{equation}
+\dfrac{
+  \empty
+}{
+  \lb{l \stt{ ==> } r}{\Delta} \longrightarrow \lb{\neg l \stt{ || } r}{\Delta}
+}
+\end{equation}
+
+\end{framed}
+\vspace{-10pt}
+\caption{Operational semantics of the partial evaluator \label{fig:partialsem}}
+\end{figure}
+
+
 \section{Verifiying Actor Systems}
 \label{actors}
 
@@ -25,7 +155,7 @@
 
 \TODO{Actor Model}
 
-\cite{actario}
+\cite{actario} \cite{verdi} \cite{akka}
 
 \subsubsection*{Message}
 
@@ -37,8 +167,7 @@ abstract class Msg
 
 \subsubsection*{Actor Reference}
 
-Each actor is associated with a unique and persistent reference, modelled as an instance
-of the \ActorRef trait.
+Each actor is associated with a unique and persistent reference, modelled as an instance of the \ActorRef trait.
 
 \begin{ShortCode}{PureScala}
 abstract class ActorRef
@@ -46,8 +175,7 @@ abstract class ActorRef
 
 \subsubsection*{In-flight Messages}
 
-In-flight messages are represented as a product of the \ActorRef of the destination actor,
-and the message itself.
+In-flight messages are represented as a product of the \ActorRef of the destination actor, and the message itself.
 
 \begin{ShortCode}{PureScala}
 case class Packet(dest: ActorRef, payload: Msg)
@@ -543,9 +671,6 @@ def main(args: Array[String]): Unit = {
   System.run()
 }
 \end{Code}
-
-\section{Partial evaluation of Inox programs}
-\label{partial}
 
 \section{Strong Eventual Consistency with CRDTs}
 \label{crdt}
