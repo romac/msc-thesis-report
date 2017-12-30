@@ -244,8 +244,7 @@ def preserveInv(s: ActorSystem, n: ActorRef, m: ActorRef): Boolean = {
 \end{ShortCode}
 
 When encoutering such a definition, Stainless will generate a verification condition 
-equivalent to \RefFig{fig:stepinvariant}, which will then be discharged to Inox and the
-underlying SMT solver.
+equivalent to \RefFig{fig:stepinvariant}, which will then be discharged to Inox and the underlying SMT solver.
 
 \subsection{Reasoning About Traces}
 \label{traces}
@@ -294,10 +293,37 @@ case class BackupB(counter: BigInt) extends Behavior {
 }
 \end{Code}
 
-An interesting invariant of the system we might want to verify is preserved at each 
-step, is 
+Given such a system, one might want to prove that the following invariant is 
+preserved between each step of its execution:
+
+\begin{Code}{PureScala}{lst:repcounterincinv}{Replicated counter invariant (increment)}
+def invariant(s: ActorSystem): Boolean = {
+  s.inboxes((Backup(), Backup())).isEmpty && {
+    (s.behaviors(Primary()), s.behaviors(Backup())) match {
+      case (PrimaryB(p), BackupB(b)) =>
+        p.value == b.value + s.inboxes(Primary() -> Backup()).length
+      case _ => false
+    }
+  }
+}
+\end{Code}
+
+This invariant specifies that the \stt{Backup()} actor does not send itself any messages, that both actors have the proper corresponding behavior, and that, last but not least, the value of the primary counter is equal to the value of the backup counter added to the number of messages that are yet to be delivered to the backup actor.\\
+
+We can now define the actual theorem we want Stainless to prove for us:
+
+\begin{Code}{PureScala}{lst:repcounterincthm}{Replicated counter theorem (increment)}
+def preserveInv(s: ActorSystem, n: ActorRef, m: ActorRef): Boolean = {
+  require(invariant(s))
+  invariant(s.step(n, m))
+} holds
+\end{Code}
+
+\TODO{Rep Counter Inc Result}
 
 \subsubsection*{Replicated Counter (deliver)}
+
+\RefCode{lst:ReplicatedCounterDel} shows a variant of the previous case study, where instead of having the primary actor forward the \stt{Inc()} message to the backup actor, it instead delivers it with its new value.
 
 \begin{Code}{PureScala}{lst:ReplicatedCounterDel}{Replicated counter implementation (deliver)}
 case class Primary() extends ActorRef
@@ -324,11 +350,34 @@ case class BackupB(counter: BigInt) extends Behavior {
 }
 \end{Code}
 
+The invariant now reads slightly differently, as can be seen in \RefCode{lst:ReplicatedCounterDelInv}, and can no longer be proven automatically by Stainless on its own. \RefCode{lst:ReplicatedCounterDel} shows the full proof.
+
+\begin{Code}{PureScala}{lst:ReplicatedCounterDelInv}{Replicated counter implementation (deliver)}
+def invariant(s: ActorSystem): Boolean = {
+  validBehaviors(s)                           &&
+  noMsgsToSelf(Primary()).isEmpty             &&
+  noMsgsToSelf(Backup()).isEmpty              &&
+  noMsgsToSelf(Backup() -> Primary()).isEmpty && {
+    val PrimBehav(p) = s.behaviors(Primary())
+    val BackBehav(b) = s.behaviors(Backup())
+    val bInbox       = s.inboxes(Primary() -> Backup())
+
+    p.value >= b.value && isSorted(bInbox) && bInbox.forall {
+      case Deliver(Counter(i)) => p.value >= i
+      case _                   => true
+    }
+  }
+}
+\end{Code}
+
+\TODO{Rep Counter Del Result}
+
+
 \subsubsection*{Lock Service}
 
-\RefCode{lst:ReplicatedCounterDel}
+\RefCode{lst:LockService} shows the implementation of a lock service using our framework. In this case study, an actor acts as a server holding a lock on some resource, while a number of other actors (the "agents") act as clients of the lock service, each potentially trying to acquire the lock on the resource. To model a variable number of actors with the same implementation, we define their reference as a case class parametrized by a \TODO{unique} identifier.
 
-\begin{Code}{PureScala}{lst:ReplicatedCounterDel}{Replicated counter implementation (deliver)}
+\begin{Code}{PureScala}{lst:LockService}{Lock service implementation}
 case class Server() extends ActorRef
 object Server {
   case class Lock(agent: ActorRef) extends Msg
@@ -382,6 +431,50 @@ case class AgentB(holdsLock: Boolean) extends Behavior {
   }
 }
 \end{Code}
+
+An obvious property we might want to prove is that, at any time, at most one of those agents thinks that it holds the lock. Additionally, we'd like to ensure that such an agent is actually the same one that the server granted the lock too. We express this property in \RefCode{lst:LockServiceInv}.
+
+\begin{Code}{PureScala}{lst:LockServiceInv}{Lock service invariant}
+def validBehaviors(s: ActorSystem): Boolean = {
+  s.behaviors(Server()).isInstanceOf[ServerB] &&
+  forall { (a: Agent) =>
+  	s.behaviors(a).isInstanceOf[AgentB]
+  }
+}
+
+def noMsgstoSelf(s: ActorSystem): Boolean = forall { (ref: ActorRef) =>
+  s.inboxes(ref -> ref).isEmpty
+}
+
+def hasLock(s: ActorSystem, a: ActorRef): Boolean = {
+  s.behaviors(a) match {
+    case AgentB(hasLock) => hasLock
+    case _ => false
+  }
+}
+
+def mutex(s: ActorSystem): Boolean = forall { (a: ActorRef, b: ActorRef) =>
+  (a != b) ==> !(hasLock(s, a) && hasLock(s, b))
+}
+
+def hasLockThenHead(s: ActorSystem): Boolean = forall { (ref: ActorRef) =>
+  hasLock(s, ref) ==> {
+    s.behaviors(Server()) match {
+      case ServerB(Cons(head, _)) => head == ref
+      case _ => false
+    }
+  }
+}
+
+def invariant(s: ActorSystem): Boolean = {
+  validBehaviors(s)  &&
+  noMsgstoSelf(s)    &&
+  mutex(s)           &&
+  hasLockThenHead(s)
+}
+\end{Code}
+
+\TODO{Lock service results}
 
 \subsubsection*{Leader Election}
 
