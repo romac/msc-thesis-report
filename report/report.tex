@@ -27,7 +27,7 @@
 
 \cite{actario}
 
-\subsubsection{Message}
+\subsubsection*{Message}
 
 In our framework, messages are modelled as instances of the \InlineS{Msg} trait.
 
@@ -35,7 +35,7 @@ In our framework, messages are modelled as instances of the \InlineS{Msg} trait.
 abstract class Msg
 \end{ShortCode}
 
-\subsubsection{Actor Reference}
+\subsubsection*{Actor Reference}
 
 Each actor is associated with a unique and persistent reference, modelled as an instance
 of the \ActorRef trait.
@@ -44,7 +44,7 @@ of the \ActorRef trait.
 abstract class ActorRef
 \end{ShortCode}
 
-\subsubsection{In-flight Messages}
+\subsubsection*{In-flight Messages}
 
 In-flight messages are represented as a product of the \ActorRef of the destination actor,
 and the message itself.
@@ -53,7 +53,7 @@ and the message itself.
 case class Packet(dest: ActorRef, payload: Msg)
 \end{ShortCode}
 
-\subsubsection{Actor Context}
+\subsubsection*{Actor Context}
 
 When a message is delivered to an actor, the latter is provided with a context,
 which holds a reference to itself, and a mutable list of \InlineS{Packet}s to send.
@@ -65,7 +65,7 @@ case class ActorContext(
 )
 \end{ShortCode}
 
-\subsubsection{Behavior}
+\subsubsection*{Behavior}
 
 A behavior specifies both the current state of an actor, and how this one should 
 process the next incoming message. In our framework, these are modelled as a subclass 
@@ -82,37 +82,36 @@ abstract class Behavior {
 }
 \end{ShortCode}
 
-\subsubsection{Transition}
+%\subsubsection*{Transition}
+%
+%Whenever a message is processed, we record the transition between the previous 
+%state of the system and the one after the message has been been processed. We keep 
+%track of this information as an instance of the \InlineS{Transition} class, which 
+%holds: the \InlineS{Msg} that has been delivered, its sender and receiver, the new 
+%behavior of the destination actor, and the list of \InlineS{Packet}s the destination 
+%actor wants to send.
+%
+%\begin{ShortCode}{PureScala}
+%case class Transition(
+%  from: ActorRef,
+%  to: ActorRef,
+%  msg: Msg,
+%  newBehavior: Behavior,
+%  toSend: List[Packet]
+%)
+%\end{ShortCode}
 
-Whenever a message is processed, we record the transition between the previous 
-state of the system and the one after the message has been been processed. We keep 
-track of this information as an instance of the \InlineS{Transition} class, which 
-holds: the \InlineS{Msg} that has been delivered, its sender and receiver, the new 
-behavior of the destination actor, and the list of \InlineS{Packet}s the destination 
-actor wants to send.
-
-\begin{ShortCode}{PureScala}
-case class Transition(
-  from: ActorRef,
-  to: ActorRef,
-  msg: Msg,
-  newBehavior: Behavior,
-  toSend: List[Packet]
-)
-\end{ShortCode}
-
-\subsubsection{Actor System}
+\subsubsection*{Actor System}
 
 The state of the Actor system at a given point in time is modelled as a case class, 
-holding the behavior associated with each actor reference, the list of in-flight messages 
-between any two actors, as well as a trace of the execution up to that point, 
-modelled as a list of \InlineS{Transition}s.
+holding the behavior associated with each actor reference, the list of in-flight messages between any two actors,
+%as well as a trace of the execution up to that point, modelled as a list of \InlineS{Transition}s.
 
 \begin{ShortCode}{PureScala}
 case class ActorSystem(
   behaviors: CMap[ActorRef, Behavior],
   inboxes: CMap[(ActorRef, ActorRef), List[Msg]],
-  trace: List[Transition]
+%  trace: List[Transition]
 )
 \end{ShortCode}
 
@@ -222,7 +221,7 @@ system preserves some invariant between each step of its execution. That is to s
 for an \InlineS{ActorSystem} $s$, any two \ActorRef $n, m$,
 and an invariant \InlineS{inv: ActorSystem $\ \to\ $ Boolean}, if $\texttt{inv}(s)$ holds, 
 then $\texttt{inv}(s\texttt{.step}(n, m))$ should hold as well. We express this 
-property more formally in \RefFig{fig:stepinvariant}.
+property more formally in \RefFig{fig:stepinvariant}. This property can be easily expressed in PureScala, as shown in \RefCode{lst:preserveInv}.
 
 \begin{figure}[!h]
 $$\forall s: \texttt{ActorSystem},\, n: \texttt{ActorRef},\, m: \texttt{ActorRef}.\ \texttt{inv($s$)} \implies \texttt{inv($s$.step($n, m$))}$$
@@ -230,9 +229,7 @@ $$\forall s: \texttt{ActorSystem},\, n: \texttt{ActorRef},\, m: \texttt{ActorRef
 \caption{Invariant preservation property\label{fig:stepinvariant}}
 \end{figure}
 
-This property can be trivially expressed in PureScala as:
-
-\begin{ShortCode}{PureScala}
+\begin{Code}{PureScala}{lst:preserveInv}{Invariant preservation theorem in PureScala}
 def inv(s: ActorSystem): Boolean = {
   /* ... */
 }
@@ -241,7 +238,7 @@ def preserveInv(s: ActorSystem, n: ActorRef, m: ActorRef): Boolean = {
   require(inv(s))
   inv(s.step(n, m))
 } holds
-\end{ShortCode}
+\end{Code}
 
 When encoutering such a definition, Stainless will generate a verification condition 
 equivalent to \RefFig{fig:stepinvariant}, which will then be discharged to Inox and the underlying SMT solver.
@@ -372,120 +369,126 @@ def invariant(s: ActorSystem): Boolean = {
 
 \TODO{Rep Counter Del Result}
 
+%\subsubsection*{Lock Service}
+%
+%\RefCode{lst:LockService} shows the implementation of a lock service using our framework. In this case study, an actor acts as a server holding a lock on some resource, while a number of other actors (the "agents") act as clients of the lock service, each potentially trying to acquire the lock on the resource. To model a variable number of actors with the same implementation, we define their reference as a case class parametrized by a \TODO{unique} identifier.
+%
+%\begin{Code}{PureScala}{lst:LockService}{Lock service implementation}
+%TODO
+%\end{Code}
+%
+%An obvious property we might want to prove is that, at any time, at most one of those agents thinks that it holds the lock. Additionally, we'd like to ensure that such an agent is actually the same one that the server granted the lock too. We express this property in \RefCode{lst:LockServiceInv}.
+%
+%\begin{Code}{PureScala}{lst:LockServiceInv}{Lock service invariant}
+%def validBehaviors(s: ActorSystem): Boolean = {
+%  s.behaviors(Server()).isInstanceOf[ServerB] &&
+%  forall { (a: Agent) =>
+%  	s.behaviors(a).isInstanceOf[AgentB]
+%  }
+%}
+%
+%def noMsgstoSelf(s: ActorSystem): Boolean = forall { (ref: ActorRef) =>
+%  s.inboxes(ref -> ref).isEmpty
+%}
+%
+%def hasLock(s: ActorSystem, a: ActorRef): Boolean = {
+%  s.behaviors(a) match {
+%    case AgentB(hasLock) => hasLock
+%    case _ => false
+%  }
+%}
+%
+%def mutex(s: ActorSystem): Boolean = forall { (a: ActorRef, b: ActorRef) =>
+%  (a != b) ==> !(hasLock(s, a) && hasLock(s, b))
+%}
+%
+%def hasLockThenHead(s: ActorSystem): Boolean = forall { (ref: ActorRef) =>
+%  hasLock(s, ref) ==> {
+%    s.behaviors(Server()) match {
+%      case ServerB(Cons(head, _)) => head == ref
+%      case _ => false
+%    }
+%  }
+%}
+%
+%def invariant(s: ActorSystem): Boolean = {
+%  validBehaviors(s)  &&
+%  noMsgstoSelf(s)    &&
+%  mutex(s)           &&
+%  hasLockThenHead(s)
+%}
+%\end{Code}
+%
+%\TODO{Lock service results}
 
-\subsubsection*{Lock Service}
+%\subsubsection*{Leader Election}
+%
+%\TODO{Leader election}
 
-\RefCode{lst:LockService} shows the implementation of a lock service using our framework. In this case study, an actor acts as a server holding a lock on some resource, while a number of other actors (the "agents") act as clients of the lock service, each potentially trying to acquire the lock on the resource. To model a variable number of actors with the same implementation, we define their reference as a case class parametrized by a \TODO{unique} identifier.
+%\subsubsection*{Key-value store}
+%
+%\TODO{KV store}
 
-\begin{Code}{PureScala}{lst:LockService}{Lock service implementation}
-case class Server() extends ActorRef
-object Server {
-  case class Lock(agent: ActorRef) extends Msg
-  case class Unlock(agent: ActorRef) extends Msg
-}
+\subsection{Spawning Actors}
+\label{spawn}
 
-case class Agent(id: BigInt) extends ActorRef
-object Agent {
-  case object Lock extends Msg
-  case object Unlock extends Msg
-  case object Grant extends Msg
-}
+Up until now, our framework has only been able to model Actor systems with a static topology, ie. systems where no new actors besides the ones that are statically defined can be spawned. Let's now attempt to enrich our model to account for dynamic topologies.
 
-// The head of `agents` holds the lock, the tail are waiting for the lock
-case class ServerB(agents: List[ActorRef]) extends Behavior {
-  def isLocked: Boolean = agents.nonEmpty
+To this end, we modify the \ActorRef definition to include both a name and an optional field holding a reference to its parent \ActorRef if any. We also add a new constructor of the \ActorRef data type, which will be assigned to actors spawned from another actor.
 
-  def processMsg(msg: Msg)(implicit ctx: ActorContext): Behavior = msg match {
-    case Server.Lock(agent) if agents.isEmpty =>
-      agent ! Agent.Grant
-      ServerB(List(agent))
+\begin{ShortCode}{PureScala}
+abstract class ActorRef(
+  name: String,
+  parent: Option[ActorRef]
+)
 
-    case Server.Lock(agent) =>
-      ServerB(agents :+ agent)
+case class Child(name: String, getParent: ActorRef)
+  extends ActorRef(name, Some(getParent))
+\end{ShortCode}
 
-    case Server.Unlock(agent) if agents.nonEmpty =>
-      val newAgents = agents.tail
-      if (newAgents.nonEmpty) newAgents.head ! Agent.Grant
-      ServerB(newAgents)
+In order for actors to spawn other actors, by specifying their name and associated 
+initial behavior, we modify the \stt{ActorContext} class as follows:
 
-    case _ =>
-      Behavior.same
+\begin{ShortCode}{PureScala}
+case class ActorContext(
+  self: ActorRef,
+  var toSend: List[Packet],
+  var toSpawn: List[(ActorRef, Behavior)]
+) {
+  def spawn(behavior: Behavior, name: String): ActorRef = {
+    val id: ActorRef = Child(name, self)
+    toSpawn = toSpawn :+ (id, behavior)
+    id
   }
+  /* ... */
 }
+\end{ShortCode}
 
-case class AgentB(holdsLock: Boolean) extends Behavior {
-  def processMsg(msg: Msg)(implicit ctx: ActorContext): Behavior = msg match {
-    case Agent.Lock =>
-      Server() ! Server.Lock(ctx.self)
-      Behavior.same
+As can be seen in the listing above, the context now keeps track of the names and 
+behaviors of the actors to be spawned, and provides a \stt{spawn} method which is in 
+charge of constructing the \ActorRef of the spawned actor, storing it along with the 
+behavior within the context, and returning the newly generated reference.
 
-    case Agent.Unlock if holdsLock =>
-      Server() ! Server.Unlock(ctx.self)
-      AgentB(false)
+Let's now update the case study in \RefCode{lst:ReplicatedCounterInc} to accommodate 
+these changes, while noting that we are not making use of this new feature yet. Only 
+the two \ActorRef definitions need to be touched, becoming:
 
-    case Agent.Grant =>
-      AgentB(true)
+\begin{ShortCode}{PureScala}
+case class Primary() extends ActorRef("primary", None())
+case class Backup()  extends ActorRef("backup", None())
+\end{ShortCode}
 
-    case _ =>
-      Behavior.same
-  }
-}
-\end{Code}
+Unfortunately, when we now feed the updated benchmark to Stainless, the latter is be 
+unable to prove the very same theorem it previously had no issue whatsoever with.
 
-An obvious property we might want to prove is that, at any time, at most one of those agents thinks that it holds the lock. Additionally, we'd like to ensure that such an agent is actually the same one that the server granted the lock too. We express this property in \RefCode{lst:LockServiceInv}.
-
-\begin{Code}{PureScala}{lst:LockServiceInv}{Lock service invariant}
-def validBehaviors(s: ActorSystem): Boolean = {
-  s.behaviors(Server()).isInstanceOf[ServerB] &&
-  forall { (a: Agent) =>
-  	s.behaviors(a).isInstanceOf[AgentB]
-  }
-}
-
-def noMsgstoSelf(s: ActorSystem): Boolean = forall { (ref: ActorRef) =>
-  s.inboxes(ref -> ref).isEmpty
-}
-
-def hasLock(s: ActorSystem, a: ActorRef): Boolean = {
-  s.behaviors(a) match {
-    case AgentB(hasLock) => hasLock
-    case _ => false
-  }
-}
-
-def mutex(s: ActorSystem): Boolean = forall { (a: ActorRef, b: ActorRef) =>
-  (a != b) ==> !(hasLock(s, a) && hasLock(s, b))
-}
-
-def hasLockThenHead(s: ActorSystem): Boolean = forall { (ref: ActorRef) =>
-  hasLock(s, ref) ==> {
-    s.behaviors(Server()) match {
-      case ServerB(Cons(head, _)) => head == ref
-      case _ => false
-    }
-  }
-}
-
-def invariant(s: ActorSystem): Boolean = {
-  validBehaviors(s)  &&
-  noMsgstoSelf(s)    &&
-  mutex(s)           &&
-  hasLockThenHead(s)
-}
-\end{Code}
-
-\TODO{Lock service results}
-
-\subsubsection*{Leader Election}
-
-\TODO{Leader election}
-
-\subsubsection*{Key-value store}
-
-\TODO{KV store}
+All is not lost though, as turning on the partial evaluator described in
+\RefSec{partial} enables Stainless to verify the program in less than 10 seconds.
 
 \subsection{Executing an Actor System with Akka}
-\label{traces}
+\label{akka}
+
+\section{Partial evaluation of Inox programs}
+\label{partial}
 
 \section{Strong Eventual Consistency with CRDTs}
 \label{crdt}
