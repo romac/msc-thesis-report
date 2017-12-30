@@ -275,6 +275,7 @@ case class Inc() extends Msg
 
 case class PrimaryB(counter: BigInt) extends Behavior {
   require(counter >= 0)
+
   def processMsg(msg: Msg)(implicit ctx: ActorContext): Behavior = msg match {
     case Inc() =>
       Backup() ! Inc()
@@ -284,6 +285,7 @@ case class PrimaryB(counter: BigInt) extends Behavior {
 
 case class BackupB(counter: BigInt) extends Behavior {
   require(counter >= 0)
+
   def processMsg(msg: Msg)(implicit ctx: ActorContext): Behavior = msg match {
     case Inc() => BackupB(counter + 1)
   }
@@ -429,63 +431,118 @@ def invariant(s: ActorSystem): Boolean = {
 %
 %\TODO{KV store}
 
-\subsection{Spawning Actors}
-\label{spawn}
-
-Up until now, our framework has only been able to model Actor systems with a static topology, ie. systems where no new actors besides the ones that are statically defined can be spawned. Let's now attempt to enrich our model to account for dynamic topologies.
-
-To this end, we modify the \ActorRef definition to include both a name and an optional field holding a reference to its parent \ActorRef if any. We also add a new constructor of the \ActorRef data type, which will be assigned to actors spawned from another actor.
-
-\begin{ShortCode}{PureScala}
-abstract class ActorRef(
-  name: String,
-  parent: Option[ActorRef]
-)
-
-case class Child(name: String, getParent: ActorRef)
-  extends ActorRef(name, Some(getParent))
-\end{ShortCode}
-
-In order for actors to spawn other actors, by specifying their name and associated 
-initial behavior, we modify the \stt{ActorContext} class as follows:
-
-\begin{ShortCode}{PureScala}
-case class ActorContext(
-  self: ActorRef,
-  var toSend: List[Packet],
-  var toSpawn: List[(ActorRef, Behavior)]
-) {
-  def spawn(behavior: Behavior, name: String): ActorRef = {
-    val id: ActorRef = Child(name, self)
-    toSpawn = toSpawn :+ (id, behavior)
-    id
-  }
-  /* ... */
-}
-\end{ShortCode}
-
-As can be seen in the listing above, the context now keeps track of the names and 
-behaviors of the actors to be spawned, and provides a \stt{spawn} method which is in 
-charge of constructing the \ActorRef of the spawned actor, storing it along with the 
-behavior within the context, and returning the newly generated reference.
-
-Let's now update the case study in \RefCode{lst:ReplicatedCounterInc} to accommodate 
-these changes, while noting that we are not making use of this new feature yet. Only 
-the two \ActorRef definitions need to be touched, becoming:
-
-\begin{ShortCode}{PureScala}
-case class Primary() extends ActorRef("primary", None())
-case class Backup()  extends ActorRef("backup", None())
-\end{ShortCode}
-
-Unfortunately, when we now feed the updated benchmark to Stainless, the latter is be 
-unable to prove the very same theorem it previously had no issue whatsoever with.
-
-All is not lost though, as turning on the partial evaluator described in
-\RefSec{partial} enables Stainless to verify the program in less than 10 seconds.
+%\subsection{Spawning Actors}
+%\label{spawn}
+%
+%Up until now, our framework has only been able to model Actor systems with a static topology, ie. systems where no new actors besides the ones that are statically defined can be spawned. Let's now attempt to enrich our model to account for dynamic topologies.
+%
+%To this end, we modify the \ActorRef definition to include both a name and an optional field holding a reference to its parent \ActorRef if any. We also add a new constructor of the \ActorRef data type, which will be assigned to actors spawned from another actor.
+%
+%\begin{ShortCode}{PureScala}
+%abstract class ActorRef(
+%  name: String,
+%  parent: Option[ActorRef]
+%)
+%
+%case class Child(name: String, getParent: ActorRef)
+%  extends ActorRef(name, Some(getParent))
+%\end{ShortCode}
+%
+%In order for actors to spawn other actors, by specifying their name and associated 
+%initial behavior, we modify the \stt{ActorContext} class as follows:
+%
+%\begin{ShortCode}{PureScala}
+%case class ActorContext(
+%  self: ActorRef,
+%  var toSend: List[Packet],
+%  var toSpawn: List[(ActorRef, Behavior)]
+%) {
+%  def spawn(behavior: Behavior, name: String): ActorRef = {
+%    val id: ActorRef = Child(name, self)
+%    toSpawn = toSpawn :+ (id, behavior)
+%    id
+%  }
+%  /* ... */
+%}
+%\end{ShortCode}
+%
+%As can be seen in the listing above, the context now keeps track of the names and 
+%behaviors of the actors to be spawned, and provides a \stt{spawn} method which is in 
+%charge of constructing the \ActorRef of the spawned actor, storing it along with the 
+%behavior within the context, and returning the newly generated reference.
+%
+%Let's now update the case study in \RefCode{lst:ReplicatedCounterInc} to accommodate 
+%these changes, while noting that we are not making use of this new feature yet. Only 
+%the two \ActorRef definitions need to be touched, becoming:
+%
+%\begin{ShortCode}{PureScala}
+%case class Primary() extends ActorRef("primary", None())
+%case class Backup()  extends ActorRef("backup", None())
+%\end{ShortCode}
+%
+%Unfortunately, when we now feed the updated benchmark to Stainless, the latter is be 
+%unable to prove the very same theorem it previously had no issue whatsoever with.
+%
+%All is not lost though, as turning on the partial evaluator described in
+%\RefSec{partial} enables Stainless to verify the program in less than 10 seconds.
 
 \subsection{Executing an Actor System with Akka}
 \label{akka}
+
+While the verification of Actor systems is in itself an interesting endeavour, it is not of much use unless one is able to run these systems, potentially in a distributed environment. In the Scala ecosystem, the most widely used real-world Actor system is Akka \TODO{REF}. \RefCode{lst:akkashim} shows a very shallow shim which allows to run an Actor system developed with our framework within Akka.
+
+\begin{Code}{PureScala}{lst:akkashim}{Akka shim for our Actor system framework}
+import akka.actor
+
+type ActorRef = actor.ActorRef
+
+case class ActorContext(self: actor.ActorRef, ctx: actor.ActorContext)
+
+class Wrapper(var behavior: Behavior)
+  extends actor.Actor with actor.ActorLogging {
+
+  implicit val ctx = ActorContext(self, context)
+
+  def receive = {
+    case msg: Msg =>
+      log.info(s"$\$${behavior}: $\$${msg}")
+      behavior = behavior.processMsg(msg)
+
+    case _ => ()
+  }
+}
+
+abstract class ActorSystem(val name: String) {
+  lazy val system = actor.ActorSystem(name)
+
+  def spawn(behavior: Behavior, name: String): actor.ActorRef = {
+    system.actorOf(actor.Props(new Wrapper(behavior)), name = name)
+  }
+
+  def run(): Unit
+}
+\end{Code}
+
+\TODO{Explain shim}
+
+It now becomes possible, with only a few alterations to the original program, to run the system on top of Akka, as shown in \RefCode{lst:akkashimex}.
+
+\begin{Code}{PureScala}{lst:akkashim}{Akka shim for our Actor system framework}
+@extern
+object System extends ActorSystem("rep-counter-sys") {
+  override def run(): Unit = {
+    val backup  = spawn(BackupB(0), "backup")
+    val primary = spawn(PrimaryB(0, backup), "primary")
+
+    primary ! Inc()
+  }
+}
+
+@extern
+def main(args: Array[String]): Unit = {
+  System.run()
+}
+\end{Code}
 
 \section{Partial evaluation of Inox programs}
 \label{partial}
