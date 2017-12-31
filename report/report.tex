@@ -25,7 +25,32 @@
 
 \TODO{Describe Stainless and Inox pipeline}
 
-While Stainless is already 
+One could expect the following program to successfully verify in a fair amount of time:
+
+\begin{ShortCode}{PureScala}
+val xs = List("a" -> 1, "b" -> 2, "c" -> 3, "d" -> 4)
+
+def test(map: Map[String, Int]) = {
+  val res = xs.foldLeft(map) {
+    case (acc, (k, v)) => acc.updated(k, v)
+  }
+
+  res.get("a") == Some(1) && 
+  res.get("b") == Some(2) && 
+  res.get("c") == Some(3) && 
+  res.get("d") == Some(4)
+}.holds
+\end{ShortCode}
+
+Unfortunately, Stainless is unable to prove the verification condition corresponding to \stt{test}'s postcondition.
+
+If one were to manually unfold \stt{foldLeft}'s definition in the code above, one would end up with the following expression for the \stt{res} variable:
+
+\begin{ShortCode}{PureScala}
+val res = map.updated("a", 1).updated("b", 2).updated("c", 3).updated("d", 4)
+\end{ShortCode}
+
+The postcondition now obviously becomes much easier to verify.
 
 We now describe a partial evaluation algorithm for Inox programs.
 The evaluator keeps track of the current \textit{path condition}, denoted by $\Delta$, as well as its associated bindings.
@@ -694,60 +719,102 @@ def invariant(s: ActorSystem): Boolean = {
 %
 %\TODO{KV store}
 
-%\subsection{Spawning Actors}
-%\label{spawn}
-%
-%Up until now, our framework has only been able to model Actor systems with a static topology, ie. systems where no new actors besides the ones that are statically defined can be spawned. Let's now attempt to enrich our model to account for dynamic topologies.
-%
-%To this end, we modify the \ActorRef definition to include both a name and an optional field holding a reference to its parent \ActorRef if any. We also add a new constructor of the \ActorRef data type, which will be assigned to actors spawned from another actor.
-%
-%\begin{ShortCode}{PureScala}
-%abstract class ActorRef(
-%  name: String,
-%  parent: Option[ActorRef]
-%)
-%
-%case class Child(name: String, getParent: ActorRef)
-%  extends ActorRef(name, Some(getParent))
-%\end{ShortCode}
-%
-%In order for actors to spawn other actors, by specifying their name and associated 
-%initial behavior, we modify the \stt{ActorContext} class as follows:
-%
-%\begin{ShortCode}{PureScala}
-%case class ActorContext(
-%  self: ActorRef,
-%  var toSend: List[Packet],
-%  var toSpawn: List[(ActorRef, Behavior)]
-%) {
-%  def spawn(behavior: Behavior, name: String): ActorRef = {
-%    val id: ActorRef = Child(name, self)
-%    toSpawn = toSpawn :+ (id, behavior)
-%    id
-%  }
-%  /* ... */
-%}
-%\end{ShortCode}
-%
-%As can be seen in the listing above, the context now keeps track of the names and 
-%behaviors of the actors to be spawned, and provides a \stt{spawn} method which is in 
-%charge of constructing the \ActorRef of the spawned actor, storing it along with the 
-%behavior within the context, and returning the newly generated reference.
-%
-%Let's now update the case study in \RefCode{lst:ReplicatedCounterInc} to accommodate 
-%these changes, while noting that we are not making use of this new feature yet. Only 
-%the two \ActorRef definitions need to be touched, becoming:
-%
-%\begin{ShortCode}{PureScala}
-%case class Primary() extends ActorRef("primary", None())
-%case class Backup()  extends ActorRef("backup", None())
-%\end{ShortCode}
-%
-%Unfortunately, when we now feed the updated benchmark to Stainless, the latter is be 
-%unable to prove the very same theorem it previously had no issue whatsoever with.
-%
-%All is not lost though, as turning on the partial evaluator described in
-%\RefSec{partial} enables Stainless to verify the program in less than 10 seconds.
+\subsection{Spawning Actors}
+\label{spawn}
+
+Up until now, our framework has only been able to model Actor systems with a static topology, ie. systems where no new actors besides the ones that are statically defined can be spawned. Let's now attempt to enrich our model to account for dynamic topologies.
+
+To this end, we modify the \ActorRef definition to include both a name and an optional field holding a reference to its parent \ActorRef if any. We also add a new constructor of the \ActorRef data type, which will be assigned to actors spawned from another actor.
+
+\begin{ShortCode}{PureScala}
+abstract class ActorRef(
+  name: String,
+  parent: Option[ActorRef]
+)
+
+case class Child(name: String, getParent: ActorRef)
+  extends ActorRef(name, Some(getParent))
+\end{ShortCode}
+
+In order for actors to spawn other actors, by specifying their name and associated 
+initial behavior, we modify the \stt{ActorContext} class as follows:
+
+\begin{ShortCode}{PureScala}
+case class ActorContext(
+  self: ActorRef,
+  var toSend: List[Packet],
+  var toSpawn: List[(ActorRef, Behavior)]
+) {
+  def spawn(behavior: Behavior, name: String): ActorRef = {
+    val id: ActorRef = Child(name, self)
+    toSpawn = toSpawn :+ (id, behavior)
+    id
+  }
+  /* ... */
+}
+\end{ShortCode}
+
+As can be seen in the listing above, the context now keeps track of the names and 
+behaviors of the actors to be spawned, and provides a \stt{spawn} method which is in 
+charge of constructing the \ActorRef of the spawned actor, storing it along with the 
+behavior within the context, and returning the newly generated reference.
+
+Let's now update the case study in \RefCode{lst:ReplicatedCounterInc} to accommodate 
+these changes, while noting that we are not making use of this new feature yet. Only 
+the two \ActorRef definitions need to be touched, becoming:
+
+\begin{ShortCode}{PureScala}
+case class Primary() extends ActorRef("primary", None())
+case class Backup()  extends ActorRef("backup", None())
+\end{ShortCode}
+
+Unfortunately, when we now feed the updated benchmark to Stainless, the latter is be 
+unable to prove the very same theorem it previously had no issue whatsoever with.
+
+All is not lost though, as turning on the partial evaluator described in
+\RefSec{partial} enables Stainless to verify the program in less than 10 seconds.
+
+\begin{Code}{PureScala}{lst:spawncode}{}
+case class Primary() extends ActorRef("primary")
+
+case class BeforeB() extends Behavior {
+  def processMsg(msg: Msg)(implicit ctx: ActorContext): Behavior = msg match {
+    case Spawn() =>
+      val child = ctx.spawn(ChildB(), "child")
+      AfterB(child)
+  }
+}
+
+case class AfterB(child: ActorRef) extends Behavior {
+  def processMsg(msg: Msg)(implicit ctx: ActorContext): Behavior = msg match {
+    case _ => Behavior.same
+  }
+}
+
+case class ChildB() extends Behavior {
+  def processMsg(msg: Msg)(implicit ctx: ActorContext): Behavior = msg match {
+    case _ => Behavior.same
+  }
+}
+
+case class Spawn() extends Msg
+
+def invariant(s: ActorSystem): Boolean = {
+  s.behaviors(Primary()) match {
+    case BeforeB() =>
+      s.isStopped(Child("child", Primary()))
+    case AfterB(child) =>
+      s.behaviors(child) == ChildB()
+
+    case _ => false
+  }
+}
+
+def theorem(s: ActorSystem, from: ActorRef, to: ActorRef): Boolean = {
+  require(invariant(s))
+  invariant(s.step(from, to))
+} holds
+\end{Code}
 
 \subsection{Executing an Actor System with Akka}
 \label{akka}
