@@ -130,7 +130,6 @@ We now describe a partial evaluation algorithm for Inox programs.
 
 \begin{equation}
 \dfrac{
-  \stt{C(T_1, $a_1, \ldots, a_n$).isInstanceOf[T$_2$]} \qquad
   \stt{T$_2$:\,ADTType} \qquad
   \neg \stt{isSort(T$_2$)}
 }{
@@ -142,8 +141,7 @@ We now describe a partial evaluation algorithm for Inox programs.
 \begin{equation}
 \dfrac{
   \stt{T:\,ADTType} \qquad
-  \stt{isSort(T)} \qquad
-  \lb{e}{\Delta} \longrightarrow e'
+  \stt{isSort(T)}
 }{
   \lb{\stt{$e$.isInstanceOf[T]}}{\Delta} \longrightarrow \stt{true}
 }
@@ -152,27 +150,50 @@ We now describe a partial evaluation algorithm for Inox programs.
 \begin{equation}
 \dfrac{
   \stt{T:\,ADTType} \qquad
-  \lb{e}{\Delta} \longrightarrow e'
+  \lb{e}{\Delta} \longrightarrow e' \qquad
+  \stt{isInstanceOf(e', T, $\Delta$) == Some($b$)}
 }{
-  \lb{\stt{$e$.isInstanceOf[T]}}{\Delta} \longrightarrow \stt{true}
+  \lb{\stt{$e$.isInstanceOf[T]}}{\Delta} \longrightarrow b
 }
 \end{equation}
 
 \begin{equation}
 \dfrac{
-  \empty
+  \stt{T:\,ADTType} \qquad
+  \lb{e}{\Delta} \longrightarrow e' \qquad
+  \stt{isInstanceOf($e'$, T, $\Delta$) == None}
 }{
-  \lb{l \stt{ ==> } r}{\Delta} \longrightarrow \lb{\neg l \stt{ || } r}{\Delta}
+  \lb{\stt{$e$.isInstanceOf[T]}}{\Delta} \longrightarrow \stt{$e'$.isInstanceOf[T]}
 }
 \end{equation}
 
 \begin{equation}
 \dfrac{
-  \empty
+  \stt{T:\,ADTType}
 }{
-  \lb{l \stt{ ==> } r}{\Delta} \longrightarrow \lb{\neg l \stt{ || } r}{\Delta}
+  \lb{\stt{$e$.asInstanceOf[T]}}{\Delta} \longrightarrow \stt{$\lb{e}{\Delta}$.asInstanceOf[T]}
 }
 \end{equation}
+
+\begin{equation}
+\dfrac{
+  \text{\TODO{This is overly simplistic}}
+}{
+  \lb{\stt{let x:\,T = $v$ in $e$}}{\Delta} \longrightarrow
+  \lb{e[\stt{x}/\stt{$v$}]}{\Delta}
+}
+\end{equation}
+
+%\begin{equation}
+%\dfrac{
+%  e = \stt{let x:\,T = if ($c_1$) $t_1$ else $e_1$ in if ($c_2$) $t_2$ else $e_2$}
+%  \qquad c_ 1 = c_2
+%}{
+%  \lb{e}{\Delta} \longrightarrow
+%  \lb{\stt{if ($c_1$) let x:\,T = $t_1$ in $t_2$ else let x:\,T = $e_1$ in $e_2$}}{\Delta}
+%}
+%\end{equation}
+
 
 \end{framed}
 \vspace{-10pt}
