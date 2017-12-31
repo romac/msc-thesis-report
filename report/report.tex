@@ -27,7 +27,7 @@
 
 We now describe a partial evaluation algorithm for Inox programs.
 
-\begin{figure}
+\begin{figure}[htb]
 \begin{framed}
  
 \begin{equation}
@@ -115,7 +115,7 @@ We now describe a partial evaluation algorithm for Inox programs.
   \lb{p}{\Delta} \longrightarrow \stt{false}
 }{
   \lb{\stt{assume($p$, $e$)}}{\Delta} \longrightarrow
-  \lb{\stt{assume(false, \lb{$e$}}}{\Delta}
+  \stt{assume(false, $\lb{e}{\Delta}$}
 }
 \end{equation}
 
@@ -133,7 +133,7 @@ We now describe a partial evaluation algorithm for Inox programs.
   \stt{T$_2$:\,ADTType} \qquad
   \neg \stt{isSort(T$_2$)}
 }{
-  \lb{\stt{C(T_1, $a_1, \ldots, a_n$).isInstanceOf[T$_2$]}}{\Delta}
+  \lb{\stt{C(T$_1$, $a_1, \ldots, a_n$).isInstanceOf[T$_2$]}}{\Delta}
   \longrightarrow \stt{T$_1$.id == T$_2$.id}
 }
 \end{equation}
@@ -175,6 +175,14 @@ We now describe a partial evaluation algorithm for Inox programs.
 }
 \end{equation}
 
+\end{framed}
+\vspace{-10pt}
+\caption{Operational semantics of the partial evaluator \label{fig:partialsem}}
+\end{figure}
+
+\begin{figure}[htb]\ContinuedFloat
+\begin{framed}
+
 \begin{equation}
 \dfrac{
   \text{\TODO{This is overly simplistic}}
@@ -194,6 +202,39 @@ We now describe a partial evaluation algorithm for Inox programs.
 %}
 %\end{equation}
 
+% TODO: Equals
+
+\begin{equation}
+\dfrac{
+  \empty
+}{
+  \lb{\neg\, e}{\Delta} \longrightarrow \neg\,\lb{e}{\Delta}
+}
+\end{equation}
+
+\begin{equation}
+\dfrac{
+  \lb{f}{\Delta} \longrightarrow \lambda \stt{x$_1$:\,T$_1$,\ldots,x$_n$:\,T$_n$.\,$b$}
+  \qquad
+  \lb{e_1}{\Delta}, \ldots, \lb{e_n}{\Delta} \longrightarrow \lb{e_1'}{\Delta}, \ldots, \lb{e_n'}{\Delta}
+}{
+  \lb{f(e_1,\ldots,e_n)}{\Delta} \longrightarrow
+  \lb{b[\stt{x}_1/e_1',\ldots,\stt{x}_n/e_n']}{\Delta}
+}
+\end{equation}
+
+\begin{equation}
+\dfrac{
+  \empty
+}{
+  \lb{f(e_1,\ldots,e_n)}{\Delta} \longrightarrow
+  \lb{f}{\Delta}(\lb{e_1}{\Delta}, \ldots, \lb{e_n}{\Delta})
+}
+\end{equation}
+
+% TODO: Application(Assume)?
+
+% TODO: FunctionInvocation
 
 \end{framed}
 \vspace{-10pt}
