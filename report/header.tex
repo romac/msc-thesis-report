@@ -103,8 +103,8 @@
   %keywordstyle={[2]\color{blue!30!darkgray}\bfseries}
 }
 
-\newcommand{\Inline}[1]{\lstinline[basicstyle=\ttfamily,columns=fixed]|#1|}
-\newcommand{\InlineS}[1]{\lstinline[language=PureScala,columns=fixed]|#1|}
+\newcommand{\Inline}[1]{\lstinline[basicstyle=\small\ttfamily,columns=fixed]|#1|}
+\newcommand{\InlineS}[1]{\lstinline[language=PureScala,basicstyle=\small\ttfamily,columns=fixed]|#1|}
 % %\newcommand{\inlineScala}[1]{\lstinline[language=MyScala,breaklines=true,breakatwhitespace=true]|#1|}
 
 % Use code in description item, Based on http://tex.stackexchange.com/a/181325/77356
@@ -119,8 +119,8 @@
 % For long listings
 \lstdefinestyle{LongCode}{
   %aboveskip=1ex,
-  % basicstyle=\small\ttfamily,
-  basicstyle=\scriptsize\ttfamily,
+  basicstyle=\small\ttfamily,
+  % basicstyle=\scriptsize\ttfamily,
   % basicstyle=\tiny\ttfamily,
   %belowskip=1ex,
   breaklines=true,
@@ -143,6 +143,7 @@
     {
       \lstset{
         language=#1,
+        basicstyle=\small\ttfamily,
         frame=trBL % box the frame & double line on bottom and left side
       }
     }
@@ -154,6 +155,7 @@
     {
       \lstset{
         language=#1,
+        basicstyle=\small\ttfamily,
         label={#2},
         caption=#3,
         captionpos=b, % bottom

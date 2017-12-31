@@ -25,7 +25,10 @@
 
 \TODO{Describe Stainless and Inox pipeline}
 
+While Stainless is already 
+
 We now describe a partial evaluation algorithm for Inox programs.
+The evaluator keeps track of the current \textit{path condition}, denoted by $\Delta$, as well as its associated bindings.
 
 \begin{figure}[htb]
 \begin{framed}
@@ -364,14 +367,14 @@ abstract class Behavior {
 \subsubsection*{Actor System}
 
 The state of the Actor system at a given point in time is modelled as a case class, 
-holding the behavior associated with each actor reference, the list of in-flight messages between any two actors,
-%as well as a trace of the execution up to that point, modelled as a list of \InlineS{Transition}s.
+holding the behavior associated with each actor reference, the list of in-flight messages between any two actors, as well as a trace of the execution up to that point, modelled as a list of \InlineS{Transition}s.
 
 \begin{ShortCode}{PureScala}
 case class ActorSystem(
   behaviors: CMap[ActorRef, Behavior],
   inboxes: CMap[(ActorRef, ActorRef), List[Msg]],
-%  trace: List[Transition]
+  trace: List[Transition]
+  
 )
 \end{ShortCode}
 
