@@ -50,7 +50,7 @@ We now describe a partial evaluation algorithm for Inox programs.
 \dfrac{
   \empty
 }{
-  \lb{\lambda x_1, \ldots, x_n.\, b}{\Delta} \longrightarrow \lambda \lb{x_1}{\Delta}, \ldots, \lb{x_n}{\Delta}.\, \lb{b}{\Delta}
+  \lb{\lambda x_1, \ldots, x_n.\, e}{\Delta} \longrightarrow \lambda \lb{x_1}{\Delta}, \ldots, \lb{x_n}{\Delta}.\, \lb{e}{\Delta}
 }
 \end{equation}
 
@@ -59,14 +59,6 @@ We now describe a partial evaluation algorithm for Inox programs.
   \empty
 }{
   \lb{\stt{$l$ ==> $r$}}{\Delta} \longrightarrow \lb{\neg l \stt{ || } r}{\Delta}
-}
-\end{equation}
-
-\begin{equation}
-\dfrac{
-  \not e \in \Delta
-}{
-  \Delta: e \longrightarrow \stt{false}
 }
 \end{equation}
 
@@ -112,17 +104,57 @@ We now describe a partial evaluation algorithm for Inox programs.
 
 \begin{equation}
 \dfrac{
-  \empty
+  \lb{p}{\Delta} \longrightarrow \stt{true}
 }{
-  \lb{\stt{$l$ ==> $r$}}{\Delta} \longrightarrow \lb{\neg l \stt{ || } r}{\Delta}
+  \lb{\stt{assume($p$, $e$)}}{\Delta} \longrightarrow \lb{e}{\Delta}
 }
 \end{equation}
 
 \begin{equation}
 \dfrac{
-  \empty
+  \lb{p}{\Delta} \longrightarrow \stt{false}
 }{
-  \lb{l \stt{ ==> } r}{\Delta} \longrightarrow \lb{\neg l \stt{ || } r}{\Delta}
+  \lb{\stt{assume($p$, $e$)}}{\Delta} \longrightarrow
+  \lb{\stt{assume(false, \lb{$e$}}}{\Delta}
+}
+\end{equation}
+
+\begin{equation}
+\dfrac{
+  \lb{p}{\Delta} \longrightarrow p'
+}{
+  \lb{\stt{assume($p$, $e$)}}{\Delta} \longrightarrow
+  \stt{assume($p'$, $\lb{e}{\Delta \cup p'}$)}
+}
+\end{equation}
+
+\begin{equation}
+\dfrac{
+  \stt{C(T_1, $a_1, \ldots, a_n$).isInstanceOf[T$_2$]} \qquad
+  \stt{T$_2$:\,ADTType} \qquad
+  \neg \stt{isSort(T$_2$)}
+}{
+  \lb{\stt{C(T_1, $a_1, \ldots, a_n$).isInstanceOf[T$_2$]}}{\Delta}
+  \longrightarrow \stt{T$_1$.id == T$_2$.id}
+}
+\end{equation}
+
+\begin{equation}
+\dfrac{
+  \stt{T:\,ADTType} \qquad
+  \stt{isSort(T)} \qquad
+  \lb{e}{\Delta} \longrightarrow e'
+}{
+  \lb{\stt{$e$.isInstanceOf[T]}}{\Delta} \longrightarrow \stt{true}
+}
+\end{equation}
+
+\begin{equation}
+\dfrac{
+  \stt{T:\,ADTType} \qquad
+  \lb{e}{\Delta} \longrightarrow e'
+}{
+  \lb{\stt{$e$.isInstanceOf[T]}}{\Delta} \longrightarrow \stt{true}
 }
 \end{equation}
 
@@ -147,7 +179,7 @@ We now describe a partial evaluation algorithm for Inox programs.
 \caption{Operational semantics of the partial evaluator \label{fig:partialsem}}
 \end{figure}
 
-
+\clearpage
 \section{Verifiying Actor Systems}
 \label{actors}
 
