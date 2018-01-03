@@ -20,40 +20,82 @@
 
 \clearpage
 
-\section{Partial Evaluation of Inox Programs}
-\label{partial}
+\section{Program verification with Stainless}
+\label{verif}
 
-\TODO{Describe Stainless and Inox pipeline}
+\TODO{Describe Stainless/Inox pipeline}
 
-One could expect the following program to successfully verify in a fair amount of time:
+
+\clearpage
+\section{Symbolic Evaluation of Inox Programs}
+\label{symbolic}
+
+\subsection{Motivation}
+
+While one would expect the following program to successfully verify in a fair amount of time, Stainless is actually unable to automatically prove the verification condition corresponding to \stt{test}'s postcondition.
 
 \begin{ShortCode}{PureScala}
-val xs = List("a" -> 1, "b" -> 2, "c" -> 3, "d" -> 4)
+def foldLeft[A](list: List[A], z: B)(f: (B, A) => B): B = list match {
+  case Nil() => z
+  case Cons(x, xs) => foldLeft(xs, f(z, x))(f)
+}
 
-def test(map: Map[String, Int]) = {
-  val res = xs.foldLeft(map) {
+def insert[A, B](values: List[(A, B)], map: Map[A, B]) = {
+  foldLeft(xs, map) {
     case (acc, (k, v)) => acc.updated(k, v)
   }
+}
 
-  res.get("a") == Some(1) && 
-  res.get("b") == Some(2) && 
-  res.get("c") == Some(3) && 
-  res.get("d") == Some(4)
+def test(map: Map[String, Int]): Boolean = {
+  val xs = List("a" -> 1, "b" -> 2, "c" -> 3, "d" -> 4)
+  val res = insert(xs, map)
+  res("b") == 2
 }.holds
 \end{ShortCode}
 
-Unfortunately, Stainless is unable to prove the verification condition corresponding to \stt{test}'s postcondition.
-
-If one were to manually unfold \stt{foldLeft}'s definition in the code above, one would end up with the following expression for the \stt{res} variable:
+On the other hand, if one were to manually unfold \stt{insert}, then unfold \stt{foldLeft} as much as possible in the program above, one would end up with the following definition for the \stt{test} function, the postcondition of which would then promptly verify.
 
 \begin{ShortCode}{PureScala}
-val res = map.updated("a", 1).updated("b", 2).updated("c", 3).updated("d", 4)
+def test(map: Map[String, Int]): Boolean = {
+  val res = map.updated("a", 1).updated("b", 2).updated("c", 3).updated("d", 4)
+  res("b") == 2
+}.holds
 \end{ShortCode}
 
-The postcondition now obviously becomes much easier to verify.
+Indeed, while the \stt{map} variable is kept abstract, the list of values \stt{xs} we want to insert is not, and it is thus possible to simplify the initial program, yielding to a much simpler verification condition.\\
 
-We now describe a partial evaluation algorithm for Inox programs.
-The evaluator keeps track of the current \textit{path condition}, denoted by $\Delta$, as well as its associated bindings.
+It is of course unreasonable to ask users to manually perform such a transformation, especially with large programs, hence why we decided to investigate a way to do so automatically, as part of the verification pipeline.
+
+\TODO{...}
+
+Let's first take a look at how the \textit{PureScala} program above looks when expressed in Inox' input language:
+
+\begin{ShortCode}{PureScala}
+def foldLeft[A](list: List[A], z: B)(f: (B, A) => B): B =
+  if (list.isInstanceOf[Nil[A]]) {
+    z
+  } else {
+    val x  = list.asInstanceOf[Cons[A]].head
+    val xs = list.asInstanceOf[Cons[A]].tail
+    foldLeft(xs, f(z, x))(f)
+  }
+}
+
+def insert[A, B](values: List[(A, B)], map: Map[A, B]) = {
+  foldLeft(xs, map, (acc: Map[A, B], kv: (A, B)) => acc.updated(kv._1, kv._2))
+}
+
+def test(map: Map[String, Int]): Boolean = {
+  val xs = List("a" -> 1, "b" -> 2, "c" -> 3, "d" -> 4)
+  val res = insert(xs, map)
+  res("b") == 2
+}.holds
+\end{ShortCode}
+
+\subsection{Semantics}
+
+The symbolic evaluator keeps track of the current \textit{path condition}, denoted by $\Delta$.   \RefFig{fig:symbolicsem} lists the evaluation rules for the symbolic evaluator. Since most of those are fairly straightforward, we will only focus on rules
+(\ref{fig:symbolicsem:fi1}), (\ref{fig:symbolicsem:fi2}) and (\ref{fig:symbolicsem:fi3}), which pertain to functions invocations.
 
 \begin{figure}[htb]
 \begin{framed}
@@ -205,7 +247,7 @@ The evaluator keeps track of the current \textit{path condition}, denoted by $\D
 
 \end{framed}
 \vspace{-10pt}
-\caption{Operational semantics of the partial evaluator \label{fig:partialsem}}
+\caption{Operational semantics of the symbolic evaluator \label{fig:symbolicsem}}
 \end{figure}
 
 %------------------------------------------------------------------------
@@ -276,6 +318,7 @@ The evaluator keeps track of the current \textit{path condition}, denoted by $\D
   \lb{\stt{id}(e_1,\ldots,e_n)}{\Delta} \longrightarrow
   \lb{\stt{id.body}[\stt{x}_1/e_1',\ldots,\stt{x}_n/e_n']}{\Delta}
 }
+\label{fig:symbolicsem:fi1}
 \end{equation}
 
 \begin{equation}
@@ -289,6 +332,7 @@ The evaluator keeps track of the current \textit{path condition}, denoted by $\D
   \lb{\stt{id}(e_1,\ldots,e_n)}{\Delta} \longrightarrow
   \lb{\stt{id.body}[\stt{x}_1/e_1',\ldots,\stt{x}_n/e_n']}{\Delta}
 }
+\label{fig:symbolicsem:fi2}
 \end{equation}
 
 \begin{equation}
@@ -298,12 +342,21 @@ The evaluator keeps track of the current \textit{path condition}, denoted by $\D
   \lb{\stt{id}(e_1,\ldots,e_n)}{\Delta} \longrightarrow
   \stt{id}(e_1',\ldots,e_n')
 }
+\label{fig:symbolicsem:fi3}
 \end{equation}
 
 \end{framed}
 \vspace{-10pt}
-\caption{Operational semantics of the partial evaluator \label{fig:partialsem}}
+\caption{Operational semantics of the symbolic evaluator \label{fig:symbolicsem}}
 \end{figure}
+
+\subsection{Case Studies}
+
+\TODO{Case Studies}
+
+\subsection{Conclusion}
+
+\TODO{Conclusion}
 
 %------------------------------------------------------------------------
 
@@ -311,26 +364,32 @@ The evaluator keeps track of the current \textit{path condition}, denoted by $\D
 \section{Verifiying Actor Systems}
 \label{actors}
 
+\subsection{Motivation}
+
+\TODO{Motivation}
+
 \subsection{The Actor Model}
 
 \TODO{Actor Model}
 
-\cite{actario} \cite{verdi} \cite{akka}
+\subsection{Our Framework}
 
 \subsubsection*{Message}
 
-In our framework, messages are modelled as instances of the \InlineS{Msg} trait.
+In our framework, messages are modelled as constructors of the \InlineS{Msg} abstract class.
 
 \begin{ShortCode}{PureScala}
 abstract class Msg
+case class Hello(name: String) extends Msg
 \end{ShortCode}
 
 \subsubsection*{Actor Reference}
 
-Each actor is associated with a unique and persistent reference, modelled as an instance of the \ActorRef trait.
+Each actor is associated with a unique and persistent reference, modelled as an instance of the \ActorRef abstract class.
 
 \begin{ShortCode}{PureScala}
 abstract class ActorRef
+case class Primary() extends ActorRef
 \end{ShortCode}
 
 \subsubsection*{In-flight Messages}
@@ -392,16 +451,17 @@ abstract class Behavior {
 \subsubsection*{Actor System}
 
 The state of the Actor system at a given point in time is modelled as a case class, 
-holding the behavior associated with each actor reference, the list of in-flight messages between any two actors, as well as a trace of the execution up to that point, modelled as a list of \InlineS{Transition}s.
+holding the behavior associated with each actor reference, and the list of in-flight messages between any two actors.
+
+% as well as a trace of the execution up to that point, modelled as a list of \InlineS{Transition}s.
 
 \begin{ShortCode}{PureScala}
 case class ActorSystem(
   behaviors: CMap[ActorRef, Behavior],
-  inboxes: CMap[(ActorRef, ActorRef), List[Msg]],
-  trace: List[Transition]
-  
+  inboxes: CMap[(ActorRef, ActorRef), List[Msg]]
 )
 \end{ShortCode}
+% trace: List[Transition]
 
 The \InlineS{ActorSystem} class is equipped with a \InlineS{step} method, which takes 
 a pair of \ActorRef as arguments, and is in charge of delivering the oldest message 
@@ -421,7 +481,7 @@ $m: \stt{Msg}$ is a message,
 $n, n_{to}, n_{from}: \stt{ActorRef}$ are references,
 $b, b': \stt{Behavior}$ are behaviors,
 $ps: \stt{List[Packet]}$ a list of packets to send,
-$t: \stt{Transition}$ is a transition,
+% $t: \stt{Transition}$ is a transition,
 $c: \stt{ActorContext}$ is a context,
 and $\emptyset_n: \stt{ActorContext}$ is the empty context for an actor whose
 self-reference is $n$, defined as $\emptyset_n := \stt{ActorContext}(n, \stt{Nil})$.
@@ -512,7 +572,7 @@ then $\texttt{inv}(s\texttt{.step}(n, m))$ should hold as well. We express this
 property more formally in \RefFig{fig:stepinvariant}. This property can be easily expressed in PureScala, as shown in \RefCode{lst:preserveInv}.
 
 \begin{figure}[!h]
-$$\forall s: \texttt{ActorSystem},\, n: \texttt{ActorRef},\, m: \texttt{ActorRef}.\ \texttt{inv($s$)} \implies \texttt{inv($s$.step($n, m$))}$$
+$$\forall s: \stt{ActorSystem},\, n: \stt{ActorRef},\, m: \stt{ActorRef}.\ \stt{inv($s$)} \implies \stt{inv($s$.step($n, m$))}$$
 \vspace{-20pt}
 \caption{Invariant preservation property\label{fig:stepinvariant}}
 \end{figure}
@@ -531,27 +591,28 @@ def preserveInv(s: ActorSystem, n: ActorRef, m: ActorRef): Boolean = {
 When encoutering such a definition, Stainless will generate a verification condition 
 equivalent to \RefFig{fig:stepinvariant}, which will then be discharged to Inox and the underlying SMT solver.
 
-\subsection{Reasoning About Traces}
-\label{traces}
-
-\TODO{Traces}
+%\subsection{Reasoning About Traces}
+%\label{traces}
+%
+%\TODO{Traces}
 
 \subsection{Case studies}
 \label{casestudies}
 
-\subsubsection*{Replicated Counter (increment)}
+\subsubsection*{Replicated Counter 1}
+\label{repcounterinc}
 
 As a first and very simple case study, we will study an Actor system which models a
 replicated counter, which can only be incremented by one unit. This system is 
-composed of two actors, a primary counter whose reference is \texttt{Primary()},
-and a backup counter whose reference is \texttt{Backup()}.
+composed of two actors, a primary counter whose reference is \stt{Primary()},
+and a backup counter whose reference is \stt{Backup()}.
 Each of these reference is associated with a behavior: the primary counter reference with
-an instance of \texttt{PrimaryB}, and the backup counter reference with an instance 
-of \texttt{BackupB}, both of which hold a positive integer, representing the value of the
-counter. Whenever the primary actor receives a message \texttt{Inc()}, it forwards that
-message to the backup actor, and returns a new instance of \texttt{PrimaryB} with the
-counter incremented by one. When the backup actor receives an \texttt{Inc()} message,
-it just returns a new instance of \texttt{BackupB} with the counter incremented by one. 
+an instance of \stt{PrimaryB}, and the backup counter reference with an instance 
+of \stt{BackupB}, both of which hold a positive integer, representing the value of the
+counter. Whenever the primary actor receives a message \stt{Inc()}, it forwards that
+message to the backup actor, and returns a new instance of \stt{PrimaryB} with the
+counter incremented by one. When the backup actor receives an \stt{Inc()} message,
+it just returns a new instance of \stt{BackupB} with the counter incremented by one. 
 The corresponding PureScala implementation can be found
 in \RefCode{lst:ReplicatedCounterInc}.
 
@@ -608,7 +669,7 @@ def preserveInv(s: ActorSystem, n: ActorRef, m: ActorRef): Boolean = {
 
 \TODO{Rep Counter Inc Result}
 
-\subsubsection*{Replicated Counter (deliver)}
+\subsubsection*{Replicated Counter 2}
 
 \RefCode{lst:ReplicatedCounterDel} shows a variant of the previous case study, where instead of having the primary actor forward the \stt{Inc()} message to the backup actor, it instead delivers it with its new value.
 
@@ -722,6 +783,8 @@ def invariant(s: ActorSystem): Boolean = {
 \subsection{Spawning Actors}
 \label{spawn}
 
+\TODO{Name uniqueness}
+
 Up until now, our framework has only been able to model Actor systems with a static topology, ie. systems where no new actors besides the ones that are statically defined can be spawned. Let's now attempt to enrich our model to account for dynamic topologies.
 
 To this end, we modify the \ActorRef definition to include both a name and an optional field holding a reference to its parent \ActorRef if any. We also add a new constructor of the \ActorRef data type, which will be assigned to actors spawned from another actor.
@@ -770,16 +833,18 @@ case class Backup()  extends ActorRef("backup", None())
 
 Unfortunately, when we now feed the updated benchmark to Stainless, the latter is be 
 unable to prove the very same theorem it previously had no issue whatsoever with.
+All is not lost though, as turning on the symbolic evaluator described in
+\RefSec{symbolic} enables Stainless to verify the program in less than 10 seconds.
 
-All is not lost though, as turning on the partial evaluator described in
-\RefSec{partial} enables Stainless to verify the program in less than 10 seconds.
+\RefCode{lst:spawncode} defines a simple system with a dynamic topology, where one actor, deemed \stt{Primary}, waits for a \stt{Spawn} message to spawn a child actor, and change its behavior from \stt{BeforeB} to \stt{AfterB} in order to keep track of the reference to the child. The invariant we would to verify holds here, states that, if the \stt{Primary} actor has behavior \stt{BeforeB()}, then the behavior associated with the \ActorRef of its child actor must be \stt{Stopped}. On the other hand, if the \stt{Primary} actor has behavior \stt{AfterB(child)}, then the behavior associated with \stt{child} must be \stt{ChildB}. This test case verifies promptly, provided the symbolic evaluator is enabled.
 
 \begin{Code}{PureScala}{lst:spawncode}{}
-case class Primary() extends ActorRef("primary")
+case object Primary extends ActorRef("primary")
+case object Spawn extends Msg
 
 case class BeforeB() extends Behavior {
   def processMsg(msg: Msg)(implicit ctx: ActorContext): Behavior = msg match {
-    case Spawn() =>
+    case Spawn =>
       val child = ctx.spawn(ChildB(), "child")
       AfterB(child)
   }
@@ -797,10 +862,8 @@ case class ChildB() extends Behavior {
   }
 }
 
-case class Spawn() extends Msg
-
 def invariant(s: ActorSystem): Boolean = {
-  s.behaviors(Primary()) match {
+  s.behaviors(Primary) match {
     case BeforeB() =>
       s.isStopped(Child("child", Primary()))
     case AfterB(child) =>
@@ -819,7 +882,7 @@ def theorem(s: ActorSystem, from: ActorRef, to: ActorRef): Boolean = {
 \subsection{Executing an Actor System with Akka}
 \label{akka}
 
-While the verification of Actor systems is in itself an interesting endeavour, it is not of much use unless one is able to run these systems, potentially in a distributed environment. In the Scala ecosystem, the most widely used real-world Actor system is Akka \TODO{REF}. \RefCode{lst:akkashim} shows a very shallow shim which allows to run an Actor system developed with our framework within Akka.
+While the verification of Actor systems is in itself an interesting endeavour, it is not of much use unless one is able to run these systems, potentially in a distributed environment. In the Scala ecosystem, the most widely used real-world Actor system is Akka \TODO{REF}. \RefCode{lst:akkashim} shows a shallow shim which allows to run an Actor system developed with our framework within Akka, with only a few alterations to the original program.
 
 \begin{Code}{PureScala}{lst:akkashim}{Akka shim for our Actor system framework}
 import akka.actor
@@ -855,12 +918,12 @@ abstract class ActorSystem(val name: String) {
 
 \TODO{Explain shim}
 
-It now becomes possible, with only a few alterations to the original program, to run the system on top of Akka, as shown in \RefCode{lst:akkashimex}.
+To this end, one must define a subclass of \stt{ActorSystem}, and provide an implementation of its \stt{run} method. Within this method, one can spawn new top-level actors, get a reference to those, and send them messages. \RefCode{lst:akkashimex} shows such an implementation for the replicated counter described in \RefSec{repcounterinc}. 
 
-\begin{Code}{PureScala}{lst:akkashim}{Akka shim for our Actor system framework}
+\begin{Code}{PureScala}{lst:akkashimex}{Akka shim for our Actor system framework}
 @extern
 object System extends ActorSystem("rep-counter-sys") {
-  override def run(): Unit = {
+  def run(): Unit = {
     val backup  = spawn(BackupB(0), "backup")
     val primary = spawn(PrimaryB(0, backup), "primary")
 
@@ -874,16 +937,19 @@ def main(args: Array[String]): Unit = {
 }
 \end{Code}
 
+\clearpage
 \section{Strong Eventual Consistency with CRDTs}
 \label{crdt}
 
-\TODO{CRDTs}
+\TODO{Strong Eventual Consistency with CRDTs}
 
+\clearpage
 \section{Biparty Communication Protocols}
 \label{biparty}
 
-\TODO{Bipart}
+\TODO{Biparty Communication Protocols}
 
+\clearpage
 \section{Conclusion}
 \label{conclusion}
 
@@ -892,12 +958,13 @@ def main(args: Array[String]): Unit = {
 \section{Future Work}
 \label{futurework}
 
-\appendix
-
 \TODO{Future Work}
+
+\appendix
 
 \clearpage
 
+\nocite{*}
 \bibliographystyle{ieeetr}
 \bibliography{report}
 
