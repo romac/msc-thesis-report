@@ -305,7 +305,7 @@
 
 \clearpage
 
-\section{Program verification with Stainless}
+\section{Program Verification with Stainless}
 \label{verif}
 
 \TODO{Describe Stainless/Inox pipeline}
@@ -1227,17 +1227,21 @@ def main(args: Array[String]): Unit = {
 }
 \end{Code}
 
-\clearpage
-\section{Strong Eventual Consistency with CRDTs}
-\label{crdt}
-
-\subsection{Motivation}
-
-\subsection{Convergent Replicated Data Types}
-
-\subsection{Conclusion}
-
-\TODO{Strong Eventual Consistency with CRDTs}
+%\clearpage
+%\section{Strong Eventual Consistency with CRDTs}
+%\label{crdt}
+%
+%\subsection{Motivation}
+%
+%Because both faults and network partitions are a common occurrence in distributed systems, these often make use of data replication in order to improve reliability \TODO{citation}, which itself can lead to  consistency issues. One increasingly popular way to mitigate this problem is to model the replicated data using \textit{Conflict-free Replicated Data Types} (CRDTs) \cite{crdt} \cite{crdtstudy}. These data types come in two flavours: \textit{Commutative Replicated Data Types} (CmRDTs, or \textit{Op-based CRDTs}) and \textit{Commutative Replicated Data Types} (CvRDTs, or \textit{State-based CDRTs}).
+%
+%\TODO{Explain eventual consistency + both models + choice of CvRDTs}
+%
+%\subsection{Proving the CRDT Laws with Stainless}
+%
+%\subsection{Conclusion}
+%
+%\TODO{Conclusion}
 
 \clearpage
 \section{Biparty Communication Protocols}
@@ -1245,13 +1249,136 @@ def main(args: Array[String]): Unit = {
 
 \subsection{Motivation}
 
+\TODO{Motivation}
+
 \subsection{Session Types}
 
-\subsection{Session Types in PureScala}
+\TODO{Introduce sessions types + discuss the most common encoding and why it does not work in PureScala}
 
-\subsection{Linear Types}
+\subsection{Session Types Encoding as ADTs}
+
+\TODO{Discuss the \textit{lchannels} \cite{lchannels} encoding and its limitations in std Scala}
+
+\subsection{Linear Types in PureScala}
+
+\begin{Code}{PureScala}{lst:sessions}{Sessions library in PureScala}
+package stainless
+
+import stainless.lang._
+import stainless.annotation._
+
+package object linear {
+
+  @ignore
+  class Linear[+A](_value: A) {
+    def ! = _value
+  }
+
+  @ignore
+  implicit def delinearize[A](lin: Linear[A]): A = lin!
+
+  @ignore
+  implicit def linearize[A](value: A): Linear[A] = new Linear(value)
+
+}
+\end{Code}
+
+\subsection{Sessions Library}
+
+\begin{Code}{PureScala}{lst:sessions}{Sessions library in PureScala}
+type LIn[A]  = Linear[In[A]]
+type LOut[A] = Linear[Out[A]]
+
+@linear
+@library
+class In[A] {
+
+  @extern
+  def receive(implicit d: Duration): Linear[A] = {
+    ???
+  }
+
+  def ?[B](f: Linear[A] => B)(implicit d: Duration): B = {
+    f(receive)
+  }
+}
+
+@linear
+@library
+class Out[A] {
+
+  @extern
+  def send(msg: A): Unit = {
+    ???
+  }
+
+  def !(msg: A): Unit = {
+    send(msg)
+  }
+
+  @extern
+  def !![B](h: LOut[B] => A): LIn[B] = {
+    ???
+  }
+
+  @extern
+  def create[B](): (LIn[B], LOut[B]) = {
+    ???
+  }
+}
+\end{Code}
 
 \subsection{Case Studies}
+
+\subsubsection*{ATM Protocol}
+
+\begin{Code}{PureScala}{lst:atm_desc}{ATM protocol description}
+//Authentication request from the user
+case class Authenticate(card: String, pin: String, cont: LOut[Response])
+
+// Authentication response from the ATM
+sealed abstract class Response
+case class Failure()                 extends Response
+case class Success(cont: LOut[Menu]) extends Response
+
+// Choices available to authenticated user
+sealed abstract class Menu
+case class CheckBalance(cont: LOut[Balance]) extends Menu
+case class Quit()                            extends Menu
+
+// User account balance
+case class Balance(amount: BigInt)
+\end{Code}
+
+\begin{Code}{PureScala}{lst:atm_impl}{ATM protocol implemenation}
+def atm(c: LIn[Authenticate]) = {
+  c ? { auth => auth! match {
+    case Authenticate(card, pin, cont) if !authenticated(card, pin) =>
+      cont ! Failure()
+
+    case Authenticate(_, pin, cont) =>
+      (cont !! (Success(_: LOut[Menu]))) ? menu
+  } }
+}
+
+def menu(menu: Linear[Menu]) = {
+  menu! match {
+    case CheckBalance(cont) =>
+      cont ! Balance(42)
+
+    case Quit() => ()
+  }
+}
+
+@extern
+def authenticated(card: String, pin: String): Boolean = {
+  /* ... */
+}
+\end{Code}
+
+\subsubsection*{TLS 1.2 Handshake}
+
+\TODO{TLS 1.2 Handshake}
 
 \subsection{Conclusion}
 
