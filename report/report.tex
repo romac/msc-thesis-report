@@ -1502,9 +1502,17 @@ def balance(card: String): BigInt = {
 }
 \end{Code}
 
-Now, what if the programmer made a mistake while writing this code, and forgot to send back a failure notification when the authentication fails?
+Now, let's consider the case where the programmer made a mistake while writing this code, and forgot to send back a failure notification when the authentication fails, such as in \RefCode{lst:atmmistake}.
+
+The linearity checker will realize that the linear \stt{cont} is not consumed in every branch of the pattern match, and will pinpoint its introduction:
 
 \begin{ShortCode}{PureScala}
+$\texttt{\textbf{\textcolor{Red}{Error}}}$: linear variable `cont` of $\texttt{type}$ `Linear[OutChan[Response]]` is never used
+                 case Authenticate(_, _, cont) =>
+                                         $\texttt{\textbf{\textcolor{Red}{\textasciicircum\textasciicircum\textasciicircum\textasciicircum}}}$
+\end{ShortCode}
+
+\begin{Code}{PureScala}{lst:atmmistake}{Wrong implementation of the ATM protocol}
 def atm(c: In[Authenticate]) = {
   c ? { auth => auth! match {  
     case Authenticate(card, pin, cont) if authenticated(card, pin) =>
@@ -1514,13 +1522,7 @@ def atm(c: In[Authenticate]) = {
       // forgot the send back a Failure message
   } }
 }
-\end{ShortCode}
-
-\begin{ShortCode}{PureScala}
-$\texttt{\textbf{\textcolor{Red}{Error}}}$: linear variable `cont` of $\texttt{type}$ `Linear[OutChan[Response]]` is never used
-                 case Authenticate(_, _, cont) =>
-                                         $\texttt{\textbf{\textcolor{Red}{\textasciicircum\textasciicircum\textasciicircum\textasciicircum}}}$
-\end{ShortCode}
+\end{Code}
 
 \subsubsection{TLS 1.2 Handshake}
 
