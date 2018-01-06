@@ -1351,9 +1351,15 @@ We now describe what it means for a linear term to be \textit{consumed}: a term 
 
 %We formalize this property in \TODO{\RefFig{}}.\\
 
-We now must ensure that no linear term can be \textit{consumed} more than once. To this end, we must recursively walk down the  track terms that have been consumed in a context so that we can disallow subsequent uses of those terms. We will denote this context by $\Delta$.
+We now must ensure that no linear term can be \textit{consumed} more than once. To this end, we must recursively walk down the AST, while keeping track of terms that have been consumed in a context so that we can disallow subsequent uses of those terms. We will denote this context by $\Delta$. \TODO{\RefFig{fig:lintypesrules} presents the type-checking rules.}\\
 
-%
+It is important to note that, when running the linearity checker over a function with pre- and/or post-conditions, these are ignored for the following reason: a user might want to constrain either a linear parameter of some function, or its return value. If we ran the linearity checker on such contracts, then one would not be able to re-use the linear variable that is being constrained in the precondition, or would not be able to reference any linear parameter in the postcondition. \TODO{Add example} \\
+
+Fortunately for us, because a function's contract will be statically verified by Stainless, there is no point to check it at runtime. Hence, in Stainless' library, both the \stt{require} function and the \stt{ensuring} method discard their body. For this reason, we can safely ignore linearity constraints in a function's contract.\\
+
+\TODO{Explain why non-linear data types cannot contain linear values + how to disallow such definitions}
+
+%\begin{landscape}
 %\begin{figure}[htb]
 %\begin{framed}
 % 
@@ -1388,6 +1394,7 @@ We now must ensure that no linear term can be \textit{consumed} more than once. 
 %\vspace{-10pt}
 %\caption{Typing rules \label{fig:lintypesrules}}
 %\end{figure}
+%\begin{landscape}
 
 \subsection{Sessions Library in PureScala}
 \label{sessions_lib}
@@ -1451,7 +1458,7 @@ Let's consider a protocol involving an ATM and its user.
 \end{enumerate}
 \end{enumerate}
 
-\RefCode{lst:atm_desc} shows the encoding of such a specification using the library described in \RefSec{sessions_lib}, while \RefCode{lst:atm_impl} shows the corresponding valid implementation.\\
+\RefCode{lst:atm_desc} shows the encoding of such a specification using the library described in \RefSec{sessions_lib}. \RefCode{lst:atm_impl} shows the corresponding valid implementation. At last, \RefCode{lst:atmmistake} shows an invalid implementation of the protocol that would still verify without the linearity checker. The three mistakes are discussed below.
 
 \begin{Code}{PureScala}{lst:atm_desc}{ATM protocol description}
 //Authentication request from the user
@@ -1502,8 +1509,6 @@ def balance(card: String): BigInt = {
 }
 \end{Code}
 
-So, what benefits does this linearity checker give us?
-
 \begin{enumerate}
 \item
 If we make a terrible mistake while implemented the \stt{atm} function by not doing anything with its linear parameter \stt{c}, eg. just left its body empty, we would be greeted with the following error:
@@ -1539,6 +1544,7 @@ At last, let's see what happens if we do not handle the reply to the \stt{Succes
 $\texttt{\textbf{\textcolor{Red}{Error}}}$: linear term cannot be discarded: cont !! Success(_)
                                         $\texttt{\textbf{\textcolor{Red}{\textasciicircum\textasciicircum\textasciicircum\textasciicircum\textasciicircum\textasciicircum\textasciicircum\textasciicircum\textasciicircum\textasciicircum\textasciicircum\textasciicircum\textasciicircum\textasciicircum\textasciicircum\textasciicircum\textasciicircum\textasciicircum}}}$
 \end{ShortCode}
+\end{enumerate}
 
 \begin{Code}{PureScala}{lst:atmmistake}{Wrong implementation of the ATM protocol}
 def atm(c: In[Authenticate]): Unit = {
