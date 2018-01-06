@@ -1451,7 +1451,7 @@ Let's consider a protocol involving an ATM and its user.
 \end{enumerate}
 \end{enumerate}
 
-\RefCode{lst:atm_desc} shows the encoding of such a specification using the library described in \RefSec{sessions_lib}, while \RefCode{lst:atm_impl} shows the corresponding valid implementation.
+\RefCode{lst:atm_desc} shows the encoding of such a specification using the library described in \RefSec{sessions_lib}, while \RefCode{lst:atm_impl} shows the corresponding valid implementation.\\
 
 \begin{Code}{PureScala}{lst:atm_desc}{ATM protocol description}
 //Authentication request from the user
@@ -1502,25 +1502,69 @@ def balance(card: String): BigInt = {
 }
 \end{Code}
 
-Now, let's consider the case where the programmer made a mistake while writing this code, and forgot to send back a failure notification when the authentication fails, such as in \RefCode{lst:atmmistake}.
+So, what benefits does this linearity checker give us?
 
-The linearity checker will realize that the linear \stt{cont} is not consumed in every branch of the pattern match, and will pinpoint its introduction:
+\begin{enumerate}
+\item
+If we make a terrible mistake while implemented the \stt{atm} function by not doing anything with its linear parameter \stt{c}, eg. just left its body empty, we would be greeted with the following error:
 
 \begin{ShortCode}{PureScala}
-$\texttt{\textbf{\textcolor{Red}{Error}}}$: linear variable `cont` of $\texttt{type}$ `Linear[OutChan[Response]]` is never used
+$\texttt{\textbf{\textcolor{Red}{Error}}}$: linear variable `c` of type `Linear[In[Authenticate]]` is never used:
+                 def atm(c: Linear[In[Authenticate]]): Unit = {
+                         $\texttt{\textbf{\textcolor{Red}{\textasciicircum\textasciicircum\textasciicircum\textasciicircum\textasciicircum\textasciicircum\textasciicircum\textasciicircum\textasciicircum\textasciicircum\textasciicircum\textasciicircum\textasciicircum\textasciicircum\textasciicircum\textasciicircum\textasciicircum\textasciicircum\textasciicircum\textasciicircum\textasciicircum\textasciicircum\textasciicircum\textasciicircum\textasciicircum\textasciicircum\textasciicircum}}}$
+\end{ShortCode}
+
+Re-using the same channel twice would also give rise to an error:
+
+\begin{ShortCode}{PureScala}
+$\texttt{\textbf{\textcolor{Red}{Error}}}$: linear term `cont` has already been used: doSomething(cont)
+                               $\texttt{\textbf{\textcolor{Red}{\textasciicircum\textasciicircum\textasciicircum\textasciicircum}}}$
+$\texttt{\textbf{\textcolor{Blue}{Info}}}$: term used here: cont !! Balance(balance(card))(_) ? menu(card)
+                                                            $\texttt{\textbf{\textcolor{Red}{\textasciicircum\textasciicircum\textasciicircum\textasciicircum}}}$
+\end{ShortCode}
+
+\item
+In case we forget to send back a failure notification when the authentication fails. The linearity checker will realize that the linear \stt{cont} is not consumed in every branch of the pattern match, and will pinpoint its introduction:
+
+\begin{ShortCode}{PureScala}
+$\texttt{\textbf{\textcolor{Red}{Error}}}$: linear variable `cont` of $\texttt{type}$ `Linear[OutChan[Response]]` is never used:
                  case Authenticate(_, _, cont) =>
                                          $\texttt{\textbf{\textcolor{Red}{\textasciicircum\textasciicircum\textasciicircum\textasciicircum}}}$
 \end{ShortCode}
 
+\item
+At last, let's see what happens if we do not handle the reply to the \stt{Success} message sent in case the authentication succeeds. Because the expression \stt{cont !! Success(\_)} has type \stt{In[Menu]}, one could expect the Scala compiler to raise a type error, as the \stt{atm} function has return type \stt{Unit}. Unfortunately, the Scala compiler will happily convert any value to \stt{Unit} if it occurs at the end of a block. But because \stt{In[Menu]} is a linear type, the linearity checker will notice that the corresponding value is being discarded, and will raise an error:
+
+\begin{ShortCode}{PureScala}
+$\texttt{\textbf{\textcolor{Red}{Error}}}$: linear term cannot be discarded: cont !! Success(_)
+                                        $\texttt{\textbf{\textcolor{Red}{\textasciicircum\textasciicircum\textasciicircum\textasciicircum\textasciicircum\textasciicircum\textasciicircum\textasciicircum\textasciicircum\textasciicircum\textasciicircum\textasciicircum\textasciicircum\textasciicircum\textasciicircum\textasciicircum\textasciicircum\textasciicircum}}}$
+\end{ShortCode}
+
 \begin{Code}{PureScala}{lst:atmmistake}{Wrong implementation of the ATM protocol}
-def atm(c: In[Authenticate]) = {
+def atm(c: In[Authenticate]): Unit = {
   c ? { auth => auth! match {  
     case Authenticate(card, pin, cont) if authenticated(card, pin) =>
-      cont !! Success(_) ? menu(card)
+    
+      // 3. do not wait for reply to `Success` message
+      cont !! Success(_)
   
-    case Authenticate(_, _, cont)  =>
-      // forgot the send back a Failure message
+    case Authenticate(_, _, cont) =>
+    
+      // 1. forgot the send back a Failure message
+
   } }
+}
+
+def menu(card: String)(menu: Linear[Menu]): Unit = {
+  menu! match {
+    case CheckBalance(cont) =>
+      cont !! Balance(balance(card))(_) ? menu(card)
+      
+       // 2. `cont` has already been used
+      doSomething(cont)
+
+    case Quit() => ()
+  }
 }
 \end{Code}
 
