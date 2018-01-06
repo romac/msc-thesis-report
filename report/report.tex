@@ -222,7 +222,8 @@
 }
 
 % Additional macros
-\newcommand{\TODO}[1]{\textcolor{YellowOrange}{(TODO: #1)}} % for inline TODO
+%\newcommand{\TODO}[1]{\textcolor{YellowOrange}{(TODO: #1)}} % for inline TODO
+\newcommand{\TODO}[1]{\textcolor{YellowOrange}{(TODO)}} % for inline TODO
 % \newcommand{\TODO}[1]{\underline{(#1)}} % for inline TODO, PRINTING
 \newcommand{\URL}[2]{#2:\xspace\href{#1}{#1}}
 \newcommand{\RefSec}[1]{Section~\ref{#1}}
@@ -889,7 +890,7 @@ equivalent to \RefFig{fig:stepinvariant}, which will then be discharged to Inox 
 \subsection{Case studies}
 \label{casestudies}
 
-\subsubsection*{Replicated Counter 1}
+\subsubsection{Increment-based Replicated Counter}
 \label{repcounterinc}
 
 As a first and very simple case study, we will study an Actor system which models a
@@ -959,9 +960,9 @@ def preserveInv(s: ActorSystem, n: ActorRef, m: ActorRef): Boolean = {
 
 \TODO{Rep Counter Inc Result}
 
-\subsubsection*{Replicated Counter 2}
+\subsubsection{Delivery-based Replicated Counter}
 
-\RefCode{lst:ReplicatedCounterDel} shows a variant of the previous case study, where instead of having the primary actor forward the \stt{Inc()} message to the backup actor, it instead delivers it with its new value.
+\RefCode{lst:ReplicatedCounterDel} shows a variant of the previous case study, where instead of having the primary actor forward the \stt{Inc()} message to the backup actor, the former instead sends the latter the new value.
 
 \begin{Code}{PureScala}{lst:ReplicatedCounterDel}{Replicated counter implementation (deliver)}
 case class Primary() extends ActorRef
@@ -988,7 +989,7 @@ case class BackupB(counter: BigInt) extends Behavior {
 }
 \end{Code}
 
-The invariant now reads slightly differently, as can be seen in \RefCode{lst:ReplicatedCounterDelInv}, and can no longer be proven automatically by Stainless on its own. \RefCode{lst:ReplicatedCounterDel} shows the full proof.
+The invariant now reads slightly differently, as can be seen in \RefCode{lst:ReplicatedCounterDelInv}.
 
 \begin{Code}{PureScala}{lst:ReplicatedCounterDelInv}{Replicated counter implementation (deliver)}
 def invariant(s: ActorSystem): Boolean = {
@@ -1073,7 +1074,7 @@ def invariant(s: ActorSystem): Boolean = {
 \subsection{Spawning Actors}
 \label{spawn}
 
-\TODO{Name uniqueness}
+\TODO{Name Uniqueness}
 
 Up until now, our framework has only been able to model Actor systems with a static topology, ie. systems where no new actors besides the ones that are statically defined can be spawned. Let's now attempt to enrich our model to account for dynamic topologies.
 
@@ -1249,17 +1250,83 @@ def main(args: Array[String]): Unit = {
 
 \subsection{Motivation}
 
-\TODO{Motivation}
-
 \subsection{Session Types}
 
-\TODO{Introduce sessions types + discuss the most common encoding and why it does not work in PureScala}
+\subsubsection{Introduction}
 
-\subsection{Session Types Encoding as ADTs}
+\subsubsection{Session Types and Linearity}
 
-\TODO{Discuss the \textit{lchannels} \cite{lchannels} encoding and its limitations in std Scala}
+\subsubsection{Value-level Encoding of Sessions}
 
-\subsection{Linear Types in PureScala}
+\subsection{Linear Types in Stainless}
+
+\subsubsection{Typing Rules}
+
+\newcommand{\lin}[1]{\text{\textexclamdown} #1}
+
+\begin{figure}[htb]
+\begin{framed}
+ 
+\begin{equation}
+\dfrac{
+  \Gamma \vdash t :\ \lin{A} \qquad t \not\in \Delta
+}{
+  \Gamma, \Delta \cup t \vdash t :\ \lin{A}
+}
+\end{equation}
+
+\begin{equation}
+\dfrac{
+  \Gamma, \Delta \vdash t : A
+}{
+  \Gamma, \Delta \cup t \vdash \stt{linearize($t$)} :\ \lin{A}
+}
+\end{equation}
+
+\begin{equation}
+\dfrac{
+  \Gamma, \Delta \vdash t : A
+}{
+  \Gamma, \Delta \cup t \vdash \stt{linearize($t$)} :\ \lin{A}
+}
+\end{equation}
+
+%\begin{equation}
+%\dfrac{
+%  \Gamma, \Delta \vdash t :\ \lin{A}
+%}{
+%  \Gamma, \Delta \cup t \vdash \stt{delinearize($t$)} : A
+%}
+%\end{equation}
+
+\begin{equation}
+\dfrac{
+  \Gamma, \Delta \vdash f : \forall a_1, \ldots, a_k.\ (T_1, \ldots, \lin{T_i}, \ldots, T_n) \to S
+  \quad
+  \Gamma, \Delta \vdash t_i : \lin{T_i}
+}{
+  \Gamma, \Delta \cup t \vdash f(t_1, \ldots, t_i \ldots, t_n) : S
+}
+\end{equation}
+
+\begin{equation}
+\dfrac{
+  \Gamma, \Delta \vdash f : \forall a_1, \ldots, a_k.\ (T_1, \ldots, T_i, \ldots, T_n) \to S
+  \quad
+  \Gamma, \Delta \vdash t_i : \lin{U}
+  \quad
+  \not\exists a_i, b.\ T_i[a_i/b] = \lin{U}
+}{
+  \Gamma, \Delta \cup t \vdash f(t_1, \ldots, t_i \ldots, t_n) : S
+}
+\end{equation}
+
+\end{framed}
+\vspace{-10pt}
+\caption{Typing rules \label{fig:lintypesrules}}
+\end{figure}
+
+\subsubsection{Implementation}
 
 \begin{Code}{PureScala}{lst:sessions}{Sessions library in PureScala}
 package stainless
@@ -1284,14 +1351,14 @@ package object linear {
 \end{Code}
 
 \subsection{Sessions Library}
+\label{sessions_lib}
 
 \begin{Code}{PureScala}{lst:sessions}{Sessions library in PureScala}
-type LIn[A]  = Linear[In[A]]
-type LOut[A] = Linear[Out[A]]
+type In[A]  = Linear[InChan[A]]
+type Out[A] = Linear[OutChan[A]]
 
-@linear
-@library
-class In[A] {
+@linear @library
+class InChan[A] {
 
   @extern
   def receive(implicit d: Duration): Linear[A] = {
@@ -1303,9 +1370,8 @@ class In[A] {
   }
 }
 
-@linear
-@library
-class Out[A] {
+@linear @library
+class OutChan[A] {
 
   @extern
   def send(msg: A): Unit = {
@@ -1317,12 +1383,12 @@ class Out[A] {
   }
 
   @extern
-  def !![B](h: LOut[B] => A): LIn[B] = {
+  def !![B](h: Out[B] => A): In[B] = {
     ???
   }
 
   @extern
-  def create[B](): (LIn[B], LOut[B]) = {
+  def create[B](): (In[B], Out[B]) = {
     ???
   }
 }
@@ -1330,41 +1396,55 @@ class Out[A] {
 
 \subsection{Case Studies}
 
-\subsubsection*{ATM Protocol}
+\subsubsection{ATM Protocol}
+
+Let's consider a protocol involving an ATM and its user.
+
+\begin{enumerate}
+\item The user authenticates herself by sending the ATM both her card number and PIN.
+\item If the authentication succeeds, the ATM displays a menu to the user, who can then choose to:
+\begin{enumerate}
+\item Abort the process altogether.
+\item Ask for her account's balance, in which case the server will reply with the balance, and displays the menu again.
+\item If the authentication fails, the ATM notifies the user of the failure, and the process is aborted.
+\end{enumerate}
+\end{enumerate}
+
+\RefCode{lst:atm_desc} shows the encoding of such a specification using the library described in \RefSec{sessions_lib}, while \RefCode{lst:atm_impl} shows the corresponding valid implementation.
 
 \begin{Code}{PureScala}{lst:atm_desc}{ATM protocol description}
 //Authentication request from the user
-case class Authenticate(card: String, pin: String, cont: LOut[Response])
+case class Authenticate(card: String, pin: String, cont: Out[Response])
 
 // Authentication response from the ATM
 sealed abstract class Response
-case class Failure()                 extends Response
-case class Success(cont: LOut[Menu]) extends Response
+case class Failure()                extends Response
+case class Success(cont: Out[Menu]) extends Response
 
 // Choices available to authenticated user
 sealed abstract class Menu
-case class CheckBalance(cont: LOut[Balance]) extends Menu
-case class Quit()                            extends Menu
+case class CheckBalance(cont: Out[Balance]) extends Menu
+case class Quit()                           extends Menu
 
 // User account balance
-case class Balance(amount: BigInt)
+case class Balance(amount: BigInt)(cont: Out[Menu])
 \end{Code}
 
 \begin{Code}{PureScala}{lst:atm_impl}{ATM protocol implemenation}
-def atm(c: LIn[Authenticate]) = {
-  c ? { auth => auth! match {
-    case Authenticate(card, pin, cont) if !authenticated(card, pin) =>
+def atm(c: In[Authenticate]) = {
+  c ? { auth => auth! match {  
+    case Authenticate(card, pin, cont) if authenticated(card, pin) =>
+      cont !! Success(_) ? menu(card)
+  
+    case Authenticate(_, _, cont)  =>
       cont ! Failure()
-
-    case Authenticate(_, pin, cont) =>
-      (cont !! (Success(_: LOut[Menu]))) ? menu
   } }
 }
 
-def menu(menu: Linear[Menu]) = {
+def menu(card: String)(menu: Linear[Menu]) = {
   menu! match {
     case CheckBalance(cont) =>
-      cont ! Balance(42)
+      cont !! Balance(balance(card))(_) ? menu(card)
 
     case Quit() => ()
   }
@@ -1374,11 +1454,34 @@ def menu(menu: Linear[Menu]) = {
 def authenticated(card: String, pin: String): Boolean = {
   /* ... */
 }
+
+@extern
+def balance(card: String): BigInt = {
+  /* ... */
+}
 \end{Code}
 
-\subsubsection*{TLS 1.2 Handshake}
+Now, what if the programmer made a mistake while writing this code, and forgot to send back a failure notification when the authentication fails?
 
-\TODO{TLS 1.2 Handshake}
+\begin{ShortCode}{PureScala}
+def atm(c: In[Authenticate]) = {
+  c ? { auth => auth! match {  
+    case Authenticate(card, pin, cont) if authenticated(card, pin) =>
+      cont !! Success(_) ? menu(card)
+  
+    case Authenticate(_, _, cont)  =>
+      // forgot the send back a Failure message
+  } }
+}
+\end{ShortCode}
+
+\begin{ShortCode}{PureScala}
+$\texttt{\textbf{\textcolor{Red}{Error}}}$: linear variable `cont` of $\texttt{type}$ `Linear[OutChan[Response]]` is never used
+                 case Authenticate(_, _, cont) =>
+                                         $\texttt{\textbf{\textcolor{Red}{\textasciicircum\textasciicircum\textasciicircum\textasciicircum}}}$
+\end{ShortCode}
+
+\subsubsection{TLS 1.2 Handshake}
 
 \subsection{Conclusion}
 
