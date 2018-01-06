@@ -222,8 +222,8 @@
 }
 
 % Additional macros
-%\newcommand{\TODO}[1]{\textcolor{YellowOrange}{(TODO: #1)}} % for inline TODO
-\newcommand{\TODO}[1]{\textcolor{YellowOrange}{(TODO)}} % for inline TODO
+\newcommand{\TODO}[1]{\textcolor{YellowOrange}{(TODO: #1)}} % for inline TODO
+%\newcommand{\TODO}[1]{\textcolor{YellowOrange}{(TODO)}} % for inline TODO
 % \newcommand{\TODO}[1]{\underline{(#1)}} % for inline TODO, PRINTING
 \newcommand{\URL}[2]{#2:\xspace\href{#1}{#1}}
 \newcommand{\RefSec}[1]{Section~\ref{#1}}
@@ -538,6 +538,7 @@ The symbolic evaluator keeps track of the current \textit{path condition}, denot
 
 %------------------------------------------------------------------------
 
+\begin{landscape}
 \begin{figure}[htb]\ContinuedFloat
 \centering
 %\begin{adjustwidth}{-1mm}{-1cm}
@@ -545,7 +546,7 @@ The symbolic evaluator keeps track of the current \textit{path condition}, denot
 
 \begin{equation}
 \dfrac{
-  \text{\TODO{This is overly simplistic}}
+%  \text{\TODO{This is overly simplistic}}
 }{
   \lb{\stt{let x:\,T = $v$ in $e$}}{\Delta} \longrightarrow
   \lb{e[\stt{x}/\stt{$v$}]}{\Delta}
@@ -635,6 +636,7 @@ The symbolic evaluator keeps track of the current \textit{path condition}, denot
 \vspace{-10pt}
 \caption{Operational semantics of the symbolic evaluator \label{fig:symbolicsem}}
 \end{figure}
+\end{landscape}
 
 \subsection{Case Studies}
 
@@ -643,6 +645,10 @@ The symbolic evaluator keeps track of the current \textit{path condition}, denot
 \subsection{Conclusion}
 
 \TODO{Conclusion}
+
+\subsection{Further Work}
+
+\TODO{Further work}
 
 %------------------------------------------------------------------------
 
@@ -1011,57 +1017,96 @@ def invariant(s: ActorSystem): Boolean = {
 
 \TODO{Rep Counter Del Result}
 
-%\subsubsection*{Lock Service}
-%
-%\RefCode{lst:LockService} shows the implementation of a lock service using our framework. In this case study, an actor acts as a server holding a lock on some resource, while a number of other actors (the "agents") act as clients of the lock service, each potentially trying to acquire the lock on the resource. To model a variable number of actors with the same implementation, we define their reference as a case class parametrized by a \TODO{unique} identifier.
-%
-%\begin{Code}{PureScala}{lst:LockService}{Lock service implementation}
-%TODO
-%\end{Code}
-%
-%An obvious property we might want to prove is that, at any time, at most one of those agents thinks that it holds the lock. Additionally, we'd like to ensure that such an agent is actually the same one that the server granted the lock too. We express this property in \RefCode{lst:LockServiceInv}.
-%
-%\begin{Code}{PureScala}{lst:LockServiceInv}{Lock service invariant}
-%def validBehaviors(s: ActorSystem): Boolean = {
-%  s.behaviors(Server()).isInstanceOf[ServerB] &&
-%  forall { (a: Agent) =>
-%  	s.behaviors(a).isInstanceOf[AgentB]
-%  }
-%}
-%
-%def noMsgstoSelf(s: ActorSystem): Boolean = forall { (ref: ActorRef) =>
-%  s.inboxes(ref -> ref).isEmpty
-%}
-%
-%def hasLock(s: ActorSystem, a: ActorRef): Boolean = {
-%  s.behaviors(a) match {
-%    case AgentB(hasLock) => hasLock
-%    case _ => false
-%  }
-%}
-%
-%def mutex(s: ActorSystem): Boolean = forall { (a: ActorRef, b: ActorRef) =>
-%  (a != b) ==> !(hasLock(s, a) && hasLock(s, b))
-%}
-%
-%def hasLockThenHead(s: ActorSystem): Boolean = forall { (ref: ActorRef) =>
-%  hasLock(s, ref) ==> {
-%    s.behaviors(Server()) match {
-%      case ServerB(Cons(head, _)) => head == ref
-%      case _ => false
-%    }
-%  }
-%}
-%
-%def invariant(s: ActorSystem): Boolean = {
-%  validBehaviors(s)  &&
-%  noMsgstoSelf(s)    &&
-%  mutex(s)           &&
-%  hasLockThenHead(s)
-%}
-%\end{Code}
-%
-%\TODO{Lock service results}
+\subsubsection{Lock Service}
+
+\RefCode{lst:LockService} shows the implementation of a lock service using our framework. In this case study, an actor acts as a server holding a lock on some resource, while a number of other actors (the "agents") act as clients of the lock service, each potentially trying to acquire the lock on the resource. To model a variable number of actors with the same implementation, we define their reference as a case class parametrized by a \TODO{unique} identifier.
+
+\begin{Code}{PureScala}{lst:LockService}{Lock service implementation}
+case class Server() extends ActorRef
+object Server {
+  case class Lock(agent: ActorRef) extends Msg
+  case class Unlock(agent: ActorRef) extends Msg
+}
+
+sealed abstract class AgentId
+
+case class Agent(id: AgentId) extends ActorRef
+object Agent {
+  case object Lock   extends Msg
+  case object Unlock extends Msg
+  case object Grant  extends Msg
+}
+
+// The head of `agents` holds the lock, the tail are waiting for the lock
+case class ServerB(agents: List[ActorRef]) extends Behavior {
+
+  def processMsg(msg: Msg)(implicit ctx: ActorContext): Behavior = msg match {
+    case Server.Lock(agent) if agents.isEmpty =>
+      agent ! Agent.Grant
+      ServerB(List(agent))
+
+    case Server.Lock(agent) =>
+      ServerB(agents :+ agent)
+
+    case Server.Unlock(agent) if agents.nonEmpty =>
+      val newAgents = agents.tail
+      if (newAgents.nonEmpty) newAgents.head ! Agent.Grant
+      ServerB(newAgents)
+
+    case _ =>
+      Behavior.same
+  }
+}
+
+case class AgentB(holdsLock: Boolean) extends Behavior {
+
+  def processMsg(msg: Msg)(implicit ctx: ActorContext): Behavior = msg match {
+    case Agent.Lock =>
+      Server() ! Server.Lock(ctx.self)
+      Behavior.same
+
+    case Agent.Unlock if holdsLock =>
+      Server() ! Server.Unlock(ctx.self)
+      AgentB(false)
+
+    case Agent.Grant =>
+      AgentB(true)
+
+    case _ =>
+      Behavior.same
+  }
+}
+\end{Code}
+
+An obvious property we might want to prove is that, at any time, at most one of those agents thinks that it holds the lock. Additionally, we'd like to ensure that such an agent is actually the same one that the server granted the lock too. We express this property in \RefCode{lst:LockServiceInv}.
+
+\begin{Code}{PureScala}{lst:LockServiceInv}{Lock service invariant}
+def hasLock(s: ActorSystem, a: ActorRef): Boolean = {
+  s.behaviors(a) match {
+    case AgentB(hasLock) => hasLock
+    case _ => false
+  }
+}
+
+def mutex(s: ActorSystem): Boolean = forall { (a: ActorRef, b: ActorRef) =>
+  (a != b) ==> !(hasLock(s, a) && hasLock(s, b))
+}
+
+def hasLockThenHead(s: ActorSystem): Boolean = forall { (ref: ActorRef) =>
+  hasLock(s, ref) ==> {
+    s.behaviors(Server()) match {
+      case ServerB(Cons(head, _)) => head == ref
+      case _ => false
+    }
+  }
+}
+
+def invariant(s: ActorSystem): Boolean = {
+  mutex(s) && hasLockThenHead(s)
+}
+\end{Code}
+
+\TODO{Lock service invariant proof}
 
 %\subsubsection*{Leader Election}
 %
@@ -1111,7 +1156,7 @@ case class ActorContext(
 As can be seen in the listing above, the context now keeps track of the names and 
 behaviors of the actors to be spawned, and provides a \stt{spawn} method which is in 
 charge of constructing the \ActorRef of the spawned actor, storing it along with the 
-behavior within the context, and returning the newly generated reference.
+behavior within the context, and returning the newly generated reference.\\
 
 Let's now update the case study in \RefCode{lst:ReplicatedCounterInc} to accommodate 
 these changes, while noting that we are not making use of this new feature yet. Only 
@@ -1125,7 +1170,7 @@ case class Backup()  extends ActorRef("backup", None())
 Unfortunately, when we now feed the updated benchmark to Stainless, the latter is be 
 unable to prove the very same theorem it previously had no issue whatsoever with.
 All is not lost though, as turning on the symbolic evaluator described in
-\RefSec{symbolic} enables Stainless to verify the program in less than 10 seconds.
+\RefSec{symbolic} enables Stainless to verify the program in less than 10 seconds.\\
 
 \RefCode{lst:spawncode} defines a simple system with a dynamic topology, where one actor, deemed \stt{Primary}, waits for a \stt{Spawn} message to spawn a child actor, and change its behavior from \stt{BeforeB} to \stt{AfterB} in order to keep track of the reference to the child. The invariant we would to verify holds here, states that, if the \stt{Primary} actor has behavior \stt{BeforeB()}, then the behavior associated with the \ActorRef of its child actor must be \stt{Stopped}. On the other hand, if the \stt{Primary} actor has behavior \stt{AfterB(child)}, then the behavior associated with \stt{child} must be \stt{ChildB}. This test case verifies promptly, provided the symbolic evaluator is enabled.
 
@@ -1170,7 +1215,7 @@ def theorem(s: ActorSystem, from: ActorRef, to: ActorRef): Boolean = {
 } holds
 \end{Code}
 
-\subsection{Executing an Actor System with Akka}
+\subsection{Running an Actor System on Akka}
 \label{akka}
 
 While the verification of Actor systems is in itself an interesting endeavour, it is not of much use unless one is able to run these systems, potentially in a distributed environment. In the Scala ecosystem, the most widely used real-world Actor system is Akka \TODO{REF}. \RefCode{lst:akkashim} shows a shallow shim which allows to run an Actor system developed with our framework within Akka, with only a few alterations to the original program.
@@ -1228,6 +1273,14 @@ def main(args: Array[String]): Unit = {
 }
 \end{Code}
 
+\subsection{Conclusion}
+
+\TODO{Conclusion}
+
+\subsection{Further Work}
+
+\TODO{Further work}
+
 %\clearpage
 %\section{Strong Eventual Consistency with CRDTs}
 %\label{crdt}
@@ -1250,85 +1303,21 @@ def main(args: Array[String]): Unit = {
 
 \subsection{Motivation}
 
-\subsection{Session Types}
-
-\subsubsection{Introduction}
-
-\subsubsection{Session Types and Linearity}
+\subsubsection{Session Types}
+\TODO{Session Types}
 
 \subsubsection{Value-level Encoding of Sessions}
+\TODO{Value-level Encoding of Sessions}
 
 \subsection{Linear Types in Stainless}
 
-\subsubsection{Typing Rules}
+\newcommand{\lin}[1]{\stt{Linear[#1]}}
 
-\newcommand{\lin}[1]{\text{\textexclamdown} #1}
+We now discuss our implementation of linear types in Stainless. One thing to note is that because the AST we are working with within Stainless is already typed, there is no need to write a full-fledged type checker. We will hence rather describe a \textit{linearity checker} for PureScala programs.\\
 
-\begin{figure}[htb]
-\begin{framed}
- 
-\begin{equation}
-\dfrac{
-  \Gamma \vdash t :\ \lin{A} \qquad t \not\in \Delta
-}{
-  \Gamma, \Delta \cup t \vdash t :\ \lin{A}
-}
-\end{equation}
+We introduce a way to mark some types as \textit{linear}. To this end, we define a covariant type constructor \stt{Linear}, which simply holds a value of type \stt{A}. This type provides a \stt{!} method to consume the linear term and return the underlying value. This enables the user to call a method of the underlying type in a concise way. As the astute reader might have noticed, this effectively adds weakening to the linear type system, and, as we will see, some care will be needed to handle such conversions properly. For example, if one had a value \stt{foo} of type \stt{Linear[Option[A]]}, one could call the \stt{isEmpty} method on the underlying value by writing \stt{foo!.isEmpty}. While making the consumption of a linear value explicit in this way is good for reasoning about one's code, there is still a bit of clutter associated with it, we also introduce an opt-in implicit conversion \stt{delinearize} from any \stt{Linear[A]} to \stt{A}. At last, because converting a non-linear value of type \stt{A} to a linear value of type \stt{Linear[A]} is always safe, we provide a such an implicit conversion by default, \stt{linearize}. \RefCode{lst:lineardef} shows the full definitions. Because those will be extracted in a specific way, they are marked \stt{@ignore}.
 
-\begin{equation}
-\dfrac{
-  \Gamma, \Delta \vdash t : A
-}{
-  \Gamma, \Delta \cup t \vdash \stt{linearize($t$)} :\ \lin{A}
-}
-\end{equation}
-
-\begin{equation}
-\dfrac{
-  \Gamma, \Delta \vdash t : A
-}{
-  \Gamma, \Delta \cup t \vdash \stt{linearize($t$)} :\ \lin{A}
-}
-\end{equation}
-
-%\begin{equation}
-%\dfrac{
-%  \Gamma, \Delta \vdash t :\ \lin{A}
-%}{
-%  \Gamma, \Delta \cup t \vdash \stt{delinearize($t$)} : A
-%}
-%\end{equation}
-
-\begin{equation}
-\dfrac{
-  \Gamma, \Delta \vdash f : \forall a_1, \ldots, a_k.\ (T_1, \ldots, \lin{T_i}, \ldots, T_n) \to S
-  \quad
-  \Gamma, \Delta \vdash t_i : \lin{T_i}
-}{
-  \Gamma, \Delta \cup t \vdash f(t_1, \ldots, t_i \ldots, t_n) : S
-}
-\end{equation}
-
-\begin{equation}
-\dfrac{
-  \Gamma, \Delta \vdash f : \forall a_1, \ldots, a_k.\ (T_1, \ldots, T_i, \ldots, T_n) \to S
-  \quad
-  \Gamma, \Delta \vdash t_i : \lin{U}
-  \quad
-  \not\exists a_i, b.\ T_i[a_i/b] = \lin{U}
-}{
-  \Gamma, \Delta \cup t \vdash f(t_1, \ldots, t_i \ldots, t_n) : S
-}
-\end{equation}
-
-\end{framed}
-\vspace{-10pt}
-\caption{Typing rules \label{fig:lintypesrules}}
-\end{figure}
-
-\subsubsection{Implementation}
-
-\begin{Code}{PureScala}{lst:sessions}{Sessions library in PureScala}
+\begin{Code}{PureScala}{lst:lineardef}{Linear wrapper for Scala types and values}
 package stainless
 
 import stainless.lang._
@@ -1340,18 +1329,70 @@ package object linear {
   class Linear[+A](_value: A) {
     def ! = _value
   }
-
-  @ignore
-  implicit def delinearize[A](lin: Linear[A]): A = lin!
-
+  
   @ignore
   implicit def linearize[A](value: A): Linear[A] = new Linear(value)
-
+  
+  object implicits {
+    @ignore
+    implicit def delinearize[A](lin: Linear[A]): A = lin!
+  }
 }
 \end{Code}
 
-\subsection{Sessions Library}
+We now describe what it means for a linear term to be \textit{consumed}: a term \stt{t} of type \stt{Linear[A]}, for any type \stt{A}, is deemed \stt{consumed} in an expression $e$ when any of the following propositions is true:
+
+\begin{itemize}
+\item The underlying value of type \stt{A} is extracted, via the \stt{!} method, eg. $e = \stt{t!}$.
+\item The term is assigned to a variable, eg. \stt{val s:\,Linear[A] = t}.
+\item The term is supplied as an argument to function, eg. given \stt{def f(x:\,Linear[A]):\,B}, we have $e = \stt{f(t)}$.
+\item The term is supplied as an argument to a constructor, eg. given \stt{case class C(x: Linear[A])}, we have $e = \stt{C(t)}$.
+\end{itemize}
+
+%We formalize this property in \TODO{\RefFig{}}.\\
+
+We now must ensure that no linear term can be \textit{consumed} more than once. To this end, we must recursively walk down the  track terms that have been consumed in a context so that we can disallow subsequent uses of those terms. We will denote this context by $\Delta$.
+
+%
+%\begin{figure}[htb]
+%\begin{framed}
+% 
+%\begin{equation}
+%\dfrac{
+%  \Delta \vdash t:\,\lin{A}
+%}{
+%  \Delta \cup t \vdash t! : A
+%}
+%\end{equation}
+%
+%\begin{equation}
+%\dfrac{
+%  \Delta \vdash t:\,\lin{A} \qquad \Delta \cup t \vdash b:\,B
+%}{
+%  \Delta \cup t \vdash \stt{val x:\,\lin{A} = $t$; $b$} : B
+%}
+%\end{equation}
+%
+%\begin{equation}
+%\dfrac{
+%  \Delta \vdash f :\,(T_1, \ldots, \lin{$T_i$}, \ldots, T_n) \to S
+%  \quad \Delta \vdash t_i : \lin{$T_i$} \\
+%  \quad \Delta \vdash (t_1, \ldots, t_{i-1}) :\, (T_1, \ldots, T_{i-1})
+%  \quad \Delta \cup t \vdash (t_{i+1}, \ldots, t_{i-1}) :\, (T_1, \ldots, T_{i-1})
+%}{
+%  \Delta \cup t \vdash f(t_1, \ldots, t_i \ldots, t_n) : S
+%}
+%\end{equation}
+%
+%\end{framed}
+%\vspace{-10pt}
+%\caption{Typing rules \label{fig:lintypesrules}}
+%\end{figure}
+
+\subsection{Sessions Library in PureScala}
 \label{sessions_lib}
+
+\RefCode{lst:sessions} shows the PureScala implementation of the \textit{lchannels} library. For the purpose of verification, we do not need a full-fledged implementation, but only declarations mirroring the Scala library. This way, one could run their implementation with the original library by simply linking against both it and the Stainless library, without our implementation.
 
 \begin{Code}{PureScala}{lst:sessions}{Sessions library in PureScala}
 type In[A]  = Linear[InChan[A]]
@@ -1483,18 +1524,21 @@ $\texttt{\textbf{\textcolor{Red}{Error}}}$: linear variable `cont` of $\texttt{t
 
 \subsubsection{TLS 1.2 Handshake}
 
+\TODO{TLS 1.2 Handshake}
+
 \subsection{Conclusion}
+
+\TODO{Conclusion}
+
+\subsection{Further Work}
+
+\TODO{Further Work}
 
 \clearpage
 \section{Conclusion}
 \label{conclusion}
 
 \TODO{Conclusion}
-
-\section{Future Work}
-\label{futurework}
-
-\TODO{Future Work}
 
 \appendix
 
