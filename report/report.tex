@@ -238,11 +238,11 @@
 
 %%%
 
-\title{Verification of complex systems in Stainless}
+\title{To be defined}
 
 \date{
-  {\small Version 0.1}\\
-  December 2017
+  {\small Version 0.6}\\
+  January 2018
 }
 
 \author{Romain Ruetschi}
@@ -318,16 +318,16 @@
 
 \subsection{Motivation}
 
-While one would expect the following program to successfully verify in a fair amount of time, Stainless is actually unable to automatically prove the verification condition corresponding to \stt{test}'s postcondition.
+Consider the following program, which inserts a known list of key-value pairs in a map that is kept abstract:
 
 \begin{ShortCode}{PureScala}
-def foldLeft[A](list: List[A], z: B)(f: (B, A) => B): B = list match {
+def foldLeft[A, B](list: List[A], z: B)(f: (B, A) => B): B = list match {
   case Nil() => z
   case Cons(x, xs) => foldLeft(xs, f(z, x))(f)
 }
 
-def insert[A, B](values: List[(A, B)], map: Map[A, B]) = {
-  foldLeft(xs, map) {
+def insert[A, B](kvs: List[(A, B)], map: Map[A, B]) = {
+  foldLeft(kvs, map) {
     case (acc, (k, v)) => acc.updated(k, v)
   }
 }
@@ -339,7 +339,11 @@ def test(map: Map[String, Int]): Boolean = {
 }.holds
 \end{ShortCode}
 
-On the other hand, if one were to manually unfold \stt{insert}, then unfold \stt{foldLeft} as much as possible in the program above, one would end up with the following definition for the \stt{test} function, the postcondition of which would then promptly verify.
+For the sake of simplicity, let us assume that Stainless is unable to automatically prove the verification condition corresponding to \stt{test}'s postcondition (we will look at actual test cases in \RefSec{symcases}).\\
+
+So, how would one go about to help Stainless prove this program correct? We could for example break up the problem, by adding appropriate postconditions to both \stt{foldLeft} and \stt{insert}, and provide the necessary lemmas, assertions, or annotations in order to get these to verify. While this is a reasonable way of going at the problem, we feel that for this specific program, there is another way of tackling the problem. Indeed, while the \stt{map} variable is kept abstract, the list of values \stt{xs} we want to insert is not, and it should thus be possible to simplify the initial program by unfolding some definitions, and simplifying the resulting expressions, yielding a much simpler verification condition.\\
+
+If we manually unfold \stt{insert} once, then unfold \stt{foldLeft} as much as possible in the program above, we end up with the following definition for the \stt{test} function, which is both much smaller and simpler than the original definition. We could then expect Stainless to have an easier time proving this theorem.
 
 \begin{ShortCode}{PureScala}
 def test(map: Map[String, Int]): Boolean = {
@@ -348,9 +352,7 @@ def test(map: Map[String, Int]): Boolean = {
 }.holds
 \end{ShortCode}
 
-Indeed, while the \stt{map} variable is kept abstract, the list of values \stt{xs} we want to insert is not, and it is thus possible to simplify the initial program, yielding to a much simpler verification condition.\\
-
-It is of course unreasonable to ask users to manually perform such a transformation, especially with large programs, hence why we decided to investigate a way to do so automatically, as part of the verification pipeline.
+We believe that it is unreasonable to expect users to manually perform such a transformation, especially with large programs, hence why we decided to investigate a way to do so automatically, as part of the verification pipeline.
 
 \TODO{...}
 
@@ -639,8 +641,86 @@ The symbolic evaluator keeps track of the current \textit{path condition}, denot
 \end{landscape}
 
 \subsection{Case Studies}
+\label{symcases}
 
-\TODO{Case Studies}
+\subsubsection{Key-value store}
+
+\RefCode{lst:symkvstore} shows the implementation of a domain-specific language to manipulate a key-value store, along with a tracing interpreter over a Scala \stt{Map}. An simple program which makes use of this DSL to insert a list of concrete values into the store is shown in \RefCode{lst:symkvstoreinv}.
+
+\begin{Code}{PureScala}{lst:symkvstoreinv}{Example program}
+def insert(kvs: List[(String, String)])(after: Op): Op = kvs match {
+  case Nil() => after
+  case Cons((k, v), rest) => put(k, v) { () => insert(rest)(after) }
+}
+
+val xs = List("foo" -> "bar", "toto" -> "tata")
+val program = insert(xs) {
+  get("foo") { foo =>
+    pure(foo)
+  }
+}
+
+def lemma(map: Map[String, String], init: List[Label]) = {
+  val (res, trace) = interpret(program)(map, init)
+
+  res == Some("bar") &&
+  trace.take(3).reverse == List(
+    Label.Put("foo", "bar"),
+    Label.Put("toto", "tata"),
+    Label.Get("foo")
+  )
+} holds
+\end{Code}
+
+While Stainless is unable to prove the verification condition associated with \stt{lemma}'s postcondition, turning on the symbolic evaluator yields the following VC, which it is then able to promptly prove is \texttt{UNSAT}, thus showing the property correct:
+
+\begin{ShortCode}{PureScala}
+val x = (
+  map.updated("foo", "bar").updated("toto", "tata").get("foo"),
+  Get("foo") :: Put("toto", "tata") :: Put("foo", "bar") :: trace
+)
+
+x._1 != Some("bar") || {
+  init.take(0).reverse :+ Put("foo", "bar") :+ Put("toto", "tata") :+ Get("foo")
+  !=
+  Put("foo", "bar") :: Put("toto", "tata") :: Get("foo") :: Nil
+}
+\end{ShortCode}
+
+%\begin{ShortCode}{PureScala}
+%[  Info  ] val x$3: (Option[String], List[Label]) = (map.updated("foo", Some[String]("bar")).updated("toto", Some[String]("tata"))("foo"), Cons[Label](Get("foo"), Cons[Label](Put("toto", "tata"), Cons[Label](Put("foo", "bar"), trace))))
+%[  Info  ] x$3._1 ≠ Some[String]("bar") || reverse[Label](take[Label](x$3._2, 3)) ≠ Cons[Label](Put("foo", "bar"), Cons[Label](Put("toto", "tata"), Cons[Label](Get("foo"), Nil[Label]())))
+%\end{ShortCode}
+
+\begin{Code}{PureScala}{lst:symkvstore}{Key-value store implementation}
+sealed abstract class Label
+object Label {
+  case class Get(key: String) extends Label
+  case class Put(key: String, value: String) extends Label
+}
+
+sealed abstract class Op
+case class Pure(value: Option[String]) extends Op
+case class Get(key: String, next: Option[String] => Op) extends Op
+case class Put(key: String, value: String, next: () => Op) extends Op
+
+def get(key: String)(next: Option[String] => Op): Op = Get(key, next)
+def put(key: String, value: String)(next: () => Op): Op = Put(key, value, next)
+def pure(value: Option[String]): Op = Pure(value)
+
+def interpret(op: Op)(kv: Map[String, String], trace: List[Label]) = op match {
+  case Get(key, next) =>
+  	interpret(next(kv.get(key)))(kv, Label.Get(key) :: trace)
+  case Put(key, value, next) =>
+  	interpret(next())(kv.updated(key, value), Label.Put(key, value) :: trace)
+  case Pure(value) =>
+  	(value, trace)
+}
+\end{Code}
+
+\subsubsection{Futamura Projections}
+
+\TODO{Futamura projection}
 
 \subsection{Conclusion}
 
@@ -913,7 +993,7 @@ it just returns a new instance of \stt{BackupB} with the counter incremented by 
 The corresponding PureScala implementation can be found
 in \RefCode{lst:ReplicatedCounterInc}.
 
-\begin{Code}{PureScala}{lst:ReplicatedCounterInc}{Replicated counter implementation (increment)}
+\begin{Code}{PureScala}{lst:ReplicatedCounterInc}{Increment-based replicated counter implementation}
 case class Primary() extends ActorRef
 case class Backup()  extends ActorRef
 
@@ -941,14 +1021,14 @@ case class BackupB(counter: BigInt) extends Behavior {
 Given such a system, one might want to prove that the following invariant is 
 preserved between each step of its execution:
 
-\begin{Code}{PureScala}{lst:repcounterincinv}{Replicated counter invariant (increment)}
+\begin{Code}{PureScala}{lst:repcounterincinv}{Increment-based replicated counter invariant}
 def invariant(s: ActorSystem): Boolean = {
   s.inboxes((Backup(), Backup())).isEmpty && {
     (s.behaviors(Primary()), s.behaviors(Backup())) match {
       case (PrimaryB(p), BackupB(b)) =>
         p.value == b.value + s.inboxes(Primary() -> Backup()).length
       case _ => false
-    }
+    }	
   }
 }
 \end{Code}
@@ -964,13 +1044,11 @@ def preserveInv(s: ActorSystem, n: ActorRef, m: ActorRef): Boolean = {
 } holds
 \end{Code}
 
-\TODO{Rep Counter Inc Result}
-
 \subsubsection{Delivery-based Replicated Counter}
 
 \RefCode{lst:ReplicatedCounterDel} shows a variant of the previous case study, where instead of having the primary actor forward the \stt{Inc()} message to the backup actor, the former instead sends the latter the new value.
 
-\begin{Code}{PureScala}{lst:ReplicatedCounterDel}{Replicated counter implementation (deliver)}
+\begin{Code}{PureScala}{lst:ReplicatedCounterDel}{Delivery-based Replicated counter implementation}
 case class Primary() extends ActorRef
 case class Backup()  extends ActorRef
 
@@ -997,7 +1075,7 @@ case class BackupB(counter: BigInt) extends Behavior {
 
 The invariant now reads slightly differently, as can be seen in \RefCode{lst:ReplicatedCounterDelInv}.
 
-\begin{Code}{PureScala}{lst:ReplicatedCounterDelInv}{Replicated counter implementation (deliver)}
+\begin{Code}{PureScala}{lst:ReplicatedCounterDelInv}{Delivery-based replicated counter invariant}
 def invariant(s: ActorSystem): Boolean = {
   validBehaviors(s)                           &&
   noMsgsToSelf(Primary()).isEmpty             &&
@@ -1015,7 +1093,7 @@ def invariant(s: ActorSystem): Boolean = {
 }
 \end{Code}
 
-\TODO{Rep Counter Del Result}
+
 
 \subsubsection{Lock Service}
 
@@ -1313,7 +1391,9 @@ def main(args: Array[String]): Unit = {
 
 \newcommand{\lin}[1]{\stt{Linear[#1]}}
 
-We now discuss our implementation of linear types in Stainless. One thing to note is that because the AST we are working with within Stainless is already typed, there is no need to write a full-fledged type checker. We will hence rather describe a \textit{linearity checker} for PureScala programs.\\
+We now discuss our implementation of linear types in Stainless. One thing to note is that because the AST we are working with within Stainless is already typed, there is no need to write a full-fledged type checker. We will hence rather describe a \textit{linearity checker} for PureScala programs.
+
+\subsubsection*{Introducing Linear Types}
 
 We introduce a way to mark some types as \textit{linear}. To this end, we define a covariant type constructor \stt{Linear}, which simply holds a value of type \stt{A}. This type provides a \stt{!} method to consume the linear term and return the underlying value. This enables the user to call a method of the underlying type in a concise way. As the astute reader might have noticed, this effectively adds weakening to the linear type system, and, as we will see, some care will be needed to handle such conversions properly. For example, if one had a value \stt{foo} of type \stt{Linear[Option[A]]}, one could call the \stt{isEmpty} method on the underlying value by writing \stt{foo!.isEmpty}. While making the consumption of a linear value explicit in this way is good for reasoning about one's code, there is still a bit of clutter associated with it, we also introduce an opt-in implicit conversion \stt{delinearize} from any \stt{Linear[A]} to \stt{A}. At last, because converting a non-linear value of type \stt{A} to a linear value of type \stt{Linear[A]} is always safe, we provide a such an implicit conversion by default, \stt{linearize}. \RefCode{lst:lineardef} shows the full definitions. Because those will be extracted in a specific way, they are marked \stt{@ignore}.
 
@@ -1340,24 +1420,38 @@ package object linear {
 }
 \end{Code}
 
+\subsubsection*{Preventing Weakening}
+
 We now describe what it means for a linear term to be \textit{consumed}: a term \stt{t} of type \stt{Linear[A]}, for any type \stt{A}, is deemed \stt{consumed} in an expression $e$ when any of the following propositions is true:
 
 \begin{itemize}
 \item The underlying value of type \stt{A} is extracted, via the \stt{!} method, eg. $e = \stt{t!}$.
 \item The term is assigned to a variable, eg. \stt{val s:\,Linear[A] = t}.
 \item The term is supplied as an argument to function, eg. given \stt{def f(x:\,Linear[A]):\,B}, we have $e = \stt{f(t)}$.
+\item The term is supplied as an argument to a method, eg. given a class \stt{C} with a method \stt{def m(x:\,Linear[A]):\,B}, a value $v:\, C$, we have $e = \stt{v.m(t)}$.
 \item The term is supplied as an argument to a constructor, eg. given \stt{case class C(x: Linear[A])}, we have $e = \stt{C(t)}$.
 \end{itemize}
 
-%We formalize this property in \TODO{\RefFig{}}.\\
-
 We now must ensure that no linear term can be \textit{consumed} more than once. To this end, we must recursively walk down the AST, while keeping track of terms that have been consumed in a context so that we can disallow subsequent uses of those terms. We will denote this context by $\Delta$. \TODO{\RefFig{fig:lintypesrules} presents the type-checking rules.}\\
 
-It is important to note that, when running the linearity checker over a function with pre- and/or post-conditions, these are ignored for the following reason: a user might want to constrain either a linear parameter of some function, or its return value. If we ran the linearity checker on such contracts, then one would not be able to re-use the linear variable that is being constrained in the precondition, or would not be able to reference any linear parameter in the postcondition. \TODO{Add example} \\
+\subsubsection*{Preventing Contraction}
+
+\subsubsection*{Linear Terms in Contracts}
+
+It is important to note that, when running the linearity checker over a function with pre- and/or post-conditions, these are ignored for the following reason: a user might want to constrain either a linear parameter of some function, or its return value. If we ran the linearity checker on such contracts, then one would not be able to re-use the linear variable that is being constrained in the precondition, or would not be able to reference any linear parameter in the postcondition. \RefCode{} shows such a use-case.
+
+\begin{Code}{PureScala}{lst:prepostlinear}{Usage of a linear variable in a function's precondition}
+def foo(x: Linear[Option[BigInt]]): BigInt = {
+  require(!x.isEmpty && x.get > 0)
+  x.get * 2
+} ensuring { _ > 0 }
+\end{Code}
 
 Fortunately for us, because a function's contract will be statically verified by Stainless, there is no point to check it at runtime. Hence, in Stainless' library, both the \stt{require} function and the \stt{ensuring} method discard their body. For this reason, we can safely ignore linearity constraints in a function's contract.\\
 
-\TODO{Explain why non-linear data types cannot contain linear values + how to disallow such definitions}
+\subsubsection*{Linear Data Types}
+
+\subsubsection*{Marking the Current Object as Linear}
 
 %\begin{landscape}
 %\begin{figure}[htb]
@@ -1586,7 +1680,6 @@ def menu(card: String)(menu: Linear[Menu]): Unit = {
 
 \TODO{Further Work}
 
-\clearpage
 \section{Conclusion}
 \label{conclusion}
 
