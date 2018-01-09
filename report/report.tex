@@ -330,9 +330,11 @@ def test(map: Map[String, Int]): Boolean = {
 
 For the sake of simplicity, let us assume that Stainless is unable to automatically prove the verification condition corresponding to \stt{test}'s postcondition (we will look at an actual test case in \RefSec{symcases}).\\
 
-So, how would one go about to help Stainless prove this program correct? We could for example break up the problem, by adding appropriate postconditions to both \stt{foldLeft} and \stt{insert}, and provide the necessary lemmas, assertions, or annotations in order to get these to verify. While this is a reasonable way of going at the problem, we feel that for this specific program, there is another way of tackling the problem. Indeed, while the \stt{map} variable is kept abstract, the list of values \stt{xs} we want to insert is not, and it should thus be possible to simplify the initial program by unfolding some definitions, and simplifying the resulting expressions, yielding a much simpler verification condition.\\
+So, how would one go about to help Stainless prove this program correct? We could for example break up the problem, by adding appropriate postconditions to both \stt{foldLeft} and \stt{insert}, and provide the necessary lemmas, assertions, or annotations in order to get these to verify.\\
 
-If we manually unfold \stt{insert} once, then unfold \stt{foldLeft} as much as possible in the program above, we end up with the following definition for the \stt{test} function, which is both much smaller and simpler than the original definition. We could then expect Stainless to have an easier time proving this theorem.
+While this is a reasonable way of going at the problem, we feel that for this specific program, there is another way of tackling the problem. Indeed, while the \stt{map} variable is kept abstract, the list of values \stt{xs} we want to insert is not, and it should thus be possible to simplify the initial program by unfolding some definitions, and simplifying the resulting expressions, yielding a much simpler verification condition.\\
+
+If we manually unfold \stt{insert} once, then unfold \stt{foldLeft} "as much as possible" in the program above, we end up with the following definition for the \stt{test} function, which is both much smaller and simpler than the original definition. We could then expect Stainless to have an easier time proving this theorem.
 
 \begin{ShortCode}{PureScala}
 def test(map: Map[String, Int]): Boolean = {
@@ -368,6 +370,8 @@ assume(x <= 0)
 val y = -x
 // PC = x <= 0 && y == -x
 \end{Code}
+
+\subsubsection{Example}
 
 Here is how the \textit{PureScala} program above is expressed in Inox's input language, formatted in \textit{PureScala} syntax:
 
@@ -892,9 +896,21 @@ def interpret(op: Op)(kv: Map[String, String], trace: List[Label]) = op match {
 
 \subsection{The Actor Model}
 
+\subsubsection{Introduction}
+
 \TODO{Actor Model}
 
-\subsection{Our Framework}
+\subsubsection{Akka}
+
+\TODO{Akka}
+
+\subsection{A Simple Actor Model for Verification}
+
+\subsubsection{Differences with Akka}
+
+The most notable difference between our model and the one implemented in Akka\footnote{Akka Documentation: Message Delivery Reliability - \url{https://doc.akka.io/docs/akka/current/general/message-delivery-reliability.html} (archive: \url{http://archive.is/XU8if})}, is that we rely on \textit{exactly-once} delivery of messages. We experimented with a weaker model that only relied on \textit{at-most-once} delivery but it quickly became clear that the amount of work needed to verify the very same systems we describe below would be too much in the context of this project.
+
+\subsubsection{Implementation}
 
 \subsubsection*{Message}
 
@@ -1378,9 +1394,7 @@ case class ActorContext(
 \end{ShortCode}
 
 As can be seen in the listing above, the context now keeps track of the names and 
-behaviors of the actors to be spawned, and provides a \stt{spawn} method which is in 
-charge of constructing the \ActorRef of the spawned actor, storing it along with the 
-behavior within the context, and returning the newly generated reference.\\
+behaviors of the actors to be spawned, and provides a \stt{spawn} method which is in  charge of constructing the \ActorRef of the spawned actor, storing it along with the  behavior within the context, and returning the newly generated reference.\\
 
 Let's now update the case study in \RefCode{lst:ReplicatedCounterInc} to accommodate 
 these changes, while noting that we are not making use of this new feature yet. Only 
@@ -1506,8 +1520,10 @@ def main(args: Array[String]): Unit = {
 \TODO{Further work}
 
 %\clearpage
-%\section{Strong Eventual Consistency with CRDTs}
+%\section{Verification of Conflict-Free Replicated Data Types}
 %\label{crdt}
+%
+%\textbf{\textcolor{Red}{Will only be included if time allows}}
 %
 %\subsection{Motivation}
 %
@@ -1515,7 +1531,13 @@ def main(args: Array[String]): Unit = {
 %
 %\TODO{Explain eventual consistency + both models + choice of CvRDTs}
 %
-%\subsection{Proving the CRDT Laws with Stainless}
+%\subsection{Verifying CRDTs Implementations}
+%
+%\subsubsection{GCounter}
+%\subsubsection{PNCounter}
+%\subsubsection{GSet}
+%\subsubsection{TwoPSet}
+%\subsubsection{ORSet}
 %
 %\subsection{Conclusion}
 %
@@ -1579,13 +1601,15 @@ We now describe what it means for a linear term to be \textit{consumed}: a term 
 \item The term is supplied as an argument to a constructor, eg. given \stt{case class C(x: Linear[A])}, we have $e = \stt{C(t)}$.
 \end{itemize}
 
-We now must ensure that no linear term can be \textit{consumed} more than once. To this end, we must recursively walk down the AST, while keeping track of terms that have been consumed in a context so that we can disallow subsequent uses of those terms. We will denote this context by $\Delta$. \TODO{\RefFig{fig:lintypesrules} presents the type-checking rules.}\\
+We now must ensure that no linear term is \textit{consumed} more than once. To this end, we must recursively walk down the AST, while keeping track of terms that have been consumed in a \textit{usage context}, in order to disallow subsequent uses of those terms. We will denote this context by $\Delta$. \TODO{\RefFig{fig:lintypesrules} presents the type-checking rules used to reject invalid programs.}\\
 
 \subsubsection*{Preventing Contraction}
 
+Because linear logic does not allow contraction, we must also ensure that no linear term is \textit{dropped}, that is to say, that it is \textit{consumed} at least once. To this end, we first collect all linear variables being introduced in a function definition, for example as a parameter to the function, in a variable binding, or within a pattern in a \texttt{clause} (even as a wildcard). Then, after having ran the type-checking algorithm described in the previous section, we can make use of the resulting \textit{usage context} $\Delta$ to check whether each and every of those variable has indeed been \textit{consumed} at some point, and reject the program otherwise.
+
 \subsubsection*{Linear Terms in Contracts}
 
-It is important to note that, when running the linearity checker over a function with pre- and/or post-conditions, these are ignored for the following reason: a user might want to constrain either a linear parameter of some function, or its return value. If we ran the linearity checker on such contracts, then one would not be able to re-use the linear variable that is being constrained in the precondition, or would not be able to reference any linear parameter in the postcondition. \RefCode{} shows such a use-case.
+It is important to note that, when running the linearity checker over a function with pre- and/or post-conditions, these are ignored for the following reason: a user might want to constrain either a linear parameter of some function, or its return value. If we ran the linearity checker on such contracts, then one would not be able to re-use the linear variable that is being constrained in the precondition, or would not be able to reference any linear parameter in the postcondition. \RefCode{lst:prepostlinear} shows such a use-case.
 
 \begin{Code}{PureScala}{lst:prepostlinear}{Usage of a linear variable in a function's precondition}
 def foo(x: Linear[Option[BigInt]]): BigInt = {
@@ -1598,9 +1622,62 @@ Fortunately for us, because a function's contract will be statically verified by
 
 \subsubsection*{Linear Data Types}
 
-\TODO{Discuss which types can contain linear fields}
+Because data types can contain linear fields, one must be careful as to when to allow values of such types to be introduced. Indeed, if one were to define a data type \stt{case class A(x:\,Linear[B])}, one should not be allowed to construct a non-linear term of type \stt{A}. That is because doing so would permit the user to have more than one (indirect) reference to the linear \stt{x} field, which is forbidden because of the No-Weakening rule. We must thus ensure that values such types are only introduced linearly, ie. as values of type \stt{Linear[A]}, whether it is as a function parameter, as a variable binding, or as field of another data type. \RefCode{lst:linearadt} features a few examples of this rule in action.
+
+\begin{Code}{PureScala}{lst:linearadt}{Linear data types in action}
+case class A(x: Linear[BigInt])
+
+case class B(a: A)          // error
+case class C(b: Linear[A])  // ok
+
+def f(x: A): A = { // error
+  x
+}
+
+def g(x: Linear[A]): Linear[A] = { // ok
+  x
+}
+
+def h(x: C): Linear[A] = c match {
+  case C(b) => b // ok
+}
+
+def i(x: BigInt): A = c match { // error
+  A(x)
+}
+
+def j(x: BigInt): Linear[A] = c match {
+  A(x) // ok
+}
+
+def k(x: BigInt): Linear[BigInt] = c match {
+  A(x) match {
+    case A(y) => y // error
+  }
+}
+\end{Code}
 
 \subsubsection*{Marking the Current Object as Linear}
+
+Another issue arise when dealing with data types meant to be introduced linearly if these have associated methods. To understand why, let's look at an example. \RefCode{lst:linfile} shows a very simple API which allows to ope a file, and read its content line-by-line. We would like to make sure that, once a user opens a file and receive the associated file handler, they must close the latter at some point.
+
+\begin{Code}{PureScala}{lst:linfile}{Linear File API}
+class FileHandler {
+  def readLine: (Option[String], Linear[FileHandler])
+  def close: Unit
+}
+
+class File(path: String) {
+  def open: Linear[FileHandler]
+}
+\end{Code}{PureScala}
+
+\begin{Code}{PureScala}{lst:linfile}{Linear File API}
+val h1 = File("test.txt").open
+val (line, h2) = h1.readLine
+h2.close
+line
+\end{Code}{PureScala}
 
 \TODO{Discuss @linear annotation}
 
@@ -1835,6 +1912,7 @@ def menu(card: String)(menu: Linear[Menu]): Unit = {
 
 \TODO{Further Work}
 
+\clearpage
 \section{Conclusion}
 \label{conclusion}
 
