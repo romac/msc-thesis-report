@@ -238,10 +238,11 @@
 
 %%%
 
-\title{To be defined}
+\title{Experiments in Program Verification with Stainless}
 
 \date{
-  {\small Version 0.6}\\
+%  {\small Version 0.6}\\
+  {\small (Draft)}\\
   January 2018
 }
 
@@ -293,24 +294,12 @@
 
 \TODO{Introduction}
 
-%\subsection*{Related Works}
-%
-%\TODO{Related Works}
-%
-%\section{Motivation}
-%\label{motivation}
-%
-%
-%\TODO{Motivation}
-%
-
 \clearpage
 
 \section{Program Verification with Stainless}
 \label{verif}
 
 \TODO{Describe Stainless/Inox pipeline}
-
 
 \clearpage
 \section{Symbolic Evaluation of Inox Programs}
@@ -339,7 +328,7 @@ def test(map: Map[String, Int]): Boolean = {
 }.holds
 \end{ShortCode}
 
-For the sake of simplicity, let us assume that Stainless is unable to automatically prove the verification condition corresponding to \stt{test}'s postcondition (we will look at actual test cases in \RefSec{symcases}).\\
+For the sake of simplicity, let us assume that Stainless is unable to automatically prove the verification condition corresponding to \stt{test}'s postcondition (we will look at an actual test case in \RefSec{symcases}).\\
 
 So, how would one go about to help Stainless prove this program correct? We could for example break up the problem, by adding appropriate postconditions to both \stt{foldLeft} and \stt{insert}, and provide the necessary lemmas, assertions, or annotations in order to get these to verify. While this is a reasonable way of going at the problem, we feel that for this specific program, there is another way of tackling the problem. Indeed, while the \stt{map} variable is kept abstract, the list of values \stt{xs} we want to insert is not, and it should thus be possible to simplify the initial program by unfolding some definitions, and simplifying the resulting expressions, yielding a much simpler verification condition.\\
 
@@ -352,25 +341,49 @@ def test(map: Map[String, Int]): Boolean = {
 }.holds
 \end{ShortCode}
 
-We believe that it is unreasonable to expect users to manually perform such a transformation, especially with large programs, hence why we decided to investigate a way to do so automatically, as part of the verification pipeline.
+We believe that it is unreasonable to expect users to manually perform such a transformation, especially with large programs. We have hence implemented an automatic transformation as part of the verification pipeline, by extending the current simplification procedure found in Inox.
 
-\TODO{...}
+\subsection{Symbolic Evaluation}
 
-Let's first take a look at how the \textit{PureScala} program above looks when expressed in Inox' input language:
+The process of simplifying a program by evaluating it as much as possible, even in the presence of unknown inputs is often referred to as \textit{symbolic evaluation}. The idea is to execute the program over symbolic inputs values while maintaining a \textit{path condition}, ie. a quantifier-free formula in conjunctive normal form that represents the constraints over the inputs we have discovered so far, as well as the branching decisions made. The actual implementation also keeps track of bound variables in a specific way for performance.
+
+\RefCode{lst:PC} shows a simple program annotated with the current path condition are various points of execution. When evaluating such a program symbolically, the path condition enables the evaluator to pick the "else" branch of the "if-then-else" expression, because, under the current path condition, the formula \stt{x <= 0}, \stt{x > 0} is unsatisfiable. As a result of the symbolic evaluation, the resulting program is now equivalent to the code featured in \RefCode{lst:PCres}.
+
+\begin{Code}{PureScala}{lst:PC}{Initial program with path condition}
+// 1. PC = true
+assume(x <= 0)
+// 2. PC = x <= 0
+val y = if (x > 0) {
+  // 2. PC = x <= 0 && x > 0
+  x
+} else {
+  // 3. PC = x <= 0
+  -x
+}
+// 4. PC = y == -x && x <= 0
+\end{Code}
+
+\begin{Code}{PureScala}{lst:PCres}{Simplified program}
+assume(x <= 0)
+val y = -x
+// PC = x <= 0 && y == -x
+\end{Code}
+
+Here is how the \textit{PureScala} program above is expressed in Inox's input language, formatted in \textit{PureScala} syntax:
 
 \begin{ShortCode}{PureScala}
-def foldLeft[A](list: List[A], z: B)(f: (B, A) => B): B =
+def foldLeft[A](list: List[A], z: B, f: (B, A) => B): B =
   if (list.isInstanceOf[Nil[A]]) {
     z
   } else {
     val x  = list.asInstanceOf[Cons[A]].head
     val xs = list.asInstanceOf[Cons[A]].tail
-    foldLeft(xs, f(z, x))(f)
+    foldLeft(xs, f(z, x), f)
   }
 }
 
 def insert[A, B](values: List[(A, B)], map: Map[A, B]) = {
-  foldLeft(xs, map, (acc: Map[A, B], kv: (A, B)) => acc.updated(kv._1, kv._2))
+  foldLeft(xs, map, (acc, kv) => acc.updated(kv._1, kv._2))
 }
 
 def test(map: Map[String, Int]): Boolean = {
@@ -380,10 +393,138 @@ def test(map: Map[String, Int]): Boolean = {
 }.holds
 \end{ShortCode}
 
+Let's only focus on the first two lines of the \stt{test} function, and go through the steps followed by the symbolic evaluator when ran on it. 
+
+\begin{ShortCode}{PureScala}
+val xs = List("a" -> 1, "b" -> 2, "c" -> 3, "d" -> 4)
+val res = insert(xs, map)
+\end{ShortCode}
+
+\begin{enumerate}
+
+\item We start by substituting the first binding into the subsequent statement:
+
+\begin{ShortCode}{PureScala}
+val res = insert(
+  Cons("a" -> 1, Cons("b" -> 2, Cons("c" -> 3, Cons("d" -> 4, Nil()),
+  map
+)
+\end{ShortCode}
+
+\item Because \stt{insert} is non-recursive function, we can unfold it straight away:
+
+\begin{ShortCode}{PureScala}
+val res = foldLeft(
+  Cons("a" -> 1, Cons("b" -> 2, Cons("c" -> 3, Cons("d" -> 4, Nil()),
+  map,
+  (acc, kv) => acc.updated(kv._1, kv._2)
+)
+\end{ShortCode}
+
+\item \stt{foldLeft} is a recursive function, and some care is thus needed here. We look at its body and find a toplevel "if-else" statement. We now ask ourselves whether or not its condition can be reduced to a boolean literal under the current path condition, ie. whether \stt{list.isInstanceOf[Nil]} evaluates to \stt{true} or \stt{false} given that \stt{list = Cons("a" -> 1, ...)}. It is clear here that this expression reduces to \stt{false}, and we can thus unfold \stt{foldLeft}'s definition and continue:
+
+\begin{ShortCode}{PureScala}
+val res = if (Cons("a" -> 1, Cons("b" -> 2, ...)).isInstanceOf[Nil[A]]) {
+  map
+} else {
+  val x  = Cons("a" -> 1, Cons("b" -> 2, ...)).asInstanceOf[Cons[A]].head
+  val xs = Cons("a" -> 1, Cons("b" -> 2, ...)).asInstanceOf[Cons[A]].tail
+  foldLeft(xs, ((acc, kv) => ...)(z, x), (acc, kv) => ...)
+}
+\end{ShortCode}
+
+\item Once again, we see that the condition evaluates to \stt{false}, and we thus replace the "if-else" statement by its "else" branch (note: our implementation actually performs this step and the previous one in go for performance):
+
+\begin{ShortCode}{PureScala}
+val res = {
+  val x  = Cons("a" -> 1, Cons("b" -> 2, ...)).asInstanceOf[Cons[A]].head
+  val xs = Cons("a" -> 1, Cons("b" -> 2, ...)).asInstanceOf[Cons[A]].tail
+  foldLeft(xs, ((acc, kv) => ...)(map, x), (acc, kv) => ...)
+}
+\end{ShortCode}
+
+\item Here we can evaluate the bound value of \stt{x} (note: we evaluate both bindings in one go here for brevity):
+
+\begin{ShortCode}{PureScala}
+val res = {
+  val x  = "a" -> 1
+  val xs = Cons("b" -> 2, ...)
+  foldLeft(xs, ((acc, kv) => ...)(map, x), (acc, kv) => ...)
+}
+\end{ShortCode}
+
+\item We now inline both bindings:
+
+\begin{ShortCode}{PureScala}
+val res = {
+  foldLeft(
+    Cons("b" -> 2, ...),
+    ((acc, kv) => ...)(map, "a" -> 1),
+    (acc, kv) => ...
+  )
+}
+\end{ShortCode}
+
+\item And we now evaluate the arguments supplied to \stt{foldLeft}, giving us:
+
+\begin{ShortCode}{PureScala}
+val res = {
+  foldLeft(
+    Cons("b" -> 2, ...),
+    map.updated("a", 1),
+    (acc, kv) => ...
+  )
+}
+\end{ShortCode}
+
+\item We now repeat steps 3 to 7 until we have traversed the entire list, leaving us with:
+
+\begin{ShortCode}{PureScala}
+val res = {
+  foldLeft(
+    Nil(),
+    map.updated("a", 1).updated("b", 2).updated("c", 3).updated("d", 4),
+    (acc, kv) => ...
+  )
+}
+\end{ShortCode}
+
+\item We once again look ahead and see that, this time, the condition will evaluate to \stt{true}, and can thus unfold \stt{foldLeft} once again, getting us to:
+
+\begin{ShortCode}{PureScala}
+val res = if (Nil().isInstanceOf[Nil[A]]) {
+  map.updated("a", 1).updated("b", 2).updated("c", 3).updated("d", 4)
+} else {
+  val x  = Nil().asInstanceOf[Cons[A]].head
+  val xs = Nil().asInstanceOf[Cons[A]].tail
+  foldLeft(xs, ((acc, kv) => ...)(z, x), (acc, kv) => ...)
+}
+\end{ShortCode}
+
+\item This time we pick the "then" branch, and end up the following expression, which we cannot reduce further, as \stt{map} is abstract and \stt{updated} is a special language construct which can only be evaluated when applied to a concrete, finite map:
+
+\begin{ShortCode}{PureScala}
+val res = map.updated("a", 1).updated("b", 2).updated("c", 3).updated("d", 4)
+\end{ShortCode}
+
+\end{enumerate}
+
+This whole process leaves us with the very same definition we would have obtained by equational reasoning, which is admittedly much simpler, and easier to reason about for Inox.
+
+\begin{ShortCode}{PureScala}
+def test(map: Map[String, Int]): Boolean = {
+  val res = map.updated("a", 1).updated("b", 2).updated("c", 3).updated("d", 4)
+  res("b") == 2
+}.holds
+\end{ShortCode}
+
 \subsection{Semantics}
 
-The symbolic evaluator keeps track of the current \textit{path condition}, denoted by $\Delta$.   \RefFig{fig:symbolicsem} lists the evaluation rules for the symbolic evaluator. Since most of those are fairly straightforward, we will only focus on rules
-(\ref{fig:symbolicsem:fi1}), (\ref{fig:symbolicsem:fi2}) and (\ref{fig:symbolicsem:fi3}), which pertain to functions invocations.
+We subsequently denote the path condition by $\Delta$, and a formula $e$ that is satisfiable under $\Delta$ by $e \in \Delta$. We will not delve into the details of how to decide whether a given condition is satisfiable under some path condition, but a reasonable although much too simplistic approximation would be to maintain a set of expressions and simply testing for membership. The actual implementation found in Inox (which predates our work) is much more complex and powerful implementation of this very idea. Moreover, we denote the fact that an expression $e$ evaluates to an expression $e'$ under a path condition $\Delta$ by $\lb{e}{\Delta} \longrightarrow e'$. Given $c, v$ two expressions, and \stt{x} a variable, we note $\Delta \cup c$ the addition of $c$ to the path condition $\Delta$, and $\Delta \uplus x \mapsto v$ the addition of the binding \stt{val x = $v$}. At last, the fact that an expression $e$ can be simplified to a boolean value under a path condition $\Delta$ is captured by $\stt{e} \Downarrow \Delta$. \RefFig{fig:symbolicsem} shows the operation semantics followed by our implementation, expressed in those terms.
+
+%\begin{itemize}
+%\item \textbf{Rule 1.} 
+%\end{itemize}
 
 \begin{figure}[htb]
 \begin{framed}
@@ -454,7 +595,7 @@ The symbolic evaluator keeps track of the current \textit{path condition}, denot
   \lb{c}{\Delta} \longrightarrow c' \qquad
   \lb{t}{\Delta \cup c'} \longrightarrow t' \qquad
   \lb{e}{\Delta \cup \neg c'} \longrightarrow e' \qquad
-  t' \not= e'
+  t' \neg= e'
 }{
   \lb{\stt{if ($c$) $t$ else $e$}}{\Delta} \longrightarrow \stt{if ($c'$) $t'$ else $e'$}
 }
@@ -565,21 +706,11 @@ The symbolic evaluator keeps track of the current \textit{path condition}, denot
 %}
 %\end{equation}
 
-% TODO: Equals
-
-\begin{equation}
-\dfrac{
-  \empty
-}{
-  \lb{\neg\, e}{\Delta} \longrightarrow \neg\,\lb{e}{\Delta}
-}
-\end{equation}
-
 \begin{equation}
 \dfrac{
   \lb{f}{\Delta} \longrightarrow \lambda \stt{x$_1$:\,T$_1$,\ldots,x$_n$:\,T$_n$.\,$b$}
   \qquad
-  \lb{e_i}{\Delta} \longrightarrow \lb{e_i'}{\Delta},\, i \in \{1 \ldots n\}
+  \lb{e_i}{\Delta} \longrightarrow e_i',\, i \in \{1 \ldots n\}
 }{
   \lb{f(e_1,\ldots,e_n)}{\Delta} \longrightarrow
   \lb{b[\stt{x}_1/e_1',\ldots,\stt{x}_n/e_n']}{\Delta}
@@ -589,7 +720,7 @@ The symbolic evaluator keeps track of the current \textit{path condition}, denot
 \begin{equation}
 \dfrac{
   \lb{f}{\Delta} \longrightarrow f' \qquad
-  \lb{e_i}{\Delta} \longrightarrow \lb{e_i'}{\Delta},\, i \in \{1 \ldots n\}
+  \lb{e_i}{\Delta} \longrightarrow e_i',\, i \in \{1 \ldots n\}
 }{
   \lb{f(e_1,\ldots,e_n)}{\Delta} \longrightarrow
   f'(e_1', \ldots, e_n')
@@ -602,7 +733,7 @@ The symbolic evaluator keeps track of the current \textit{path condition}, denot
 \dfrac{
  \neg\,\stt{isRecursive(id)} \quad
  \stt{id.params} = \langle \stt{x}_1, \ldots, \stt{x}_n \rangle \quad
- \lb{e_i}{\Delta} \longrightarrow \lb{e_i'}{\Delta},\, i \in \{1 \ldots n\}
+ \lb{e_i}{\Delta} \longrightarrow e_i',\, i \in \{1 \ldots n\}
 }{
   \lb{\stt{id}(e_1,\ldots,e_n)}{\Delta} \longrightarrow
   \lb{\stt{id.body}[\stt{x}_1/e_1',\ldots,\stt{x}_n/e_n']}{\Delta}
@@ -616,7 +747,7 @@ The symbolic evaluator keeps track of the current \textit{path condition}, denot
  \quad
  \stt{id.params} = \langle \stt{x}_1, \ldots, \stt{x}_n \rangle
  \quad
- \lb{e_i}{\Delta} \longrightarrow \lb{e_i'}{\Delta},\  i \in \{1 \ldots n\}
+ \lb{e_i}{\Delta} \longrightarrow e_i',\  i \in \{1 \ldots n\}
 }{
   \lb{\stt{id}(e_1,\ldots,e_n)}{\Delta} \longrightarrow
   \lb{\stt{id.body}[\stt{x}_1/e_1',\ldots,\stt{x}_n/e_n']}{\Delta}
@@ -626,12 +757,31 @@ The symbolic evaluator keeps track of the current \textit{path condition}, denot
 
 \begin{equation}
 \dfrac{
- \lb{e_i}{\Delta} \longrightarrow \lb{e_i'}{\Delta},\, i \in \{1 \ldots n\}
+ \lb{e_i}{\Delta} \longrightarrow e_i',\, i \in \{1 \ldots n\}
 }{
   \lb{\stt{id}(e_1,\ldots,e_n)}{\Delta} \longrightarrow
   \stt{id}(e_1',\ldots,e_n')
 }
 \label{fig:symbolicsem:fi3}
+\end{equation}
+
+\begin{equation}
+\dfrac{
+ e = \stt{if ($c$) $t_1$ else $t_2$} \quad
+ \lb{c}{\Delta} \longrightarrow r \quad
+ r \in \{\stt{true}, \stt{false}\}
+}{
+  \stt{e} \Downarrow \Delta
+}
+\end{equation}
+
+\begin{equation}
+\dfrac{
+  (\stt{cons}, (e_1, \ldots, e_n)) = \stt{deconstruct(e)} \quad
+  \lb{e_i}{\Delta} \longrightarrow e_i',\, i \in \{1 \ldots n\}
+}{
+  \lb{e}{\Delta} \longrightarrow \stt{cons}(e_1', \ldots, e_2')
+}
 \end{equation}
 
 \end{framed}
@@ -640,10 +790,12 @@ The symbolic evaluator keeps track of the current \textit{path condition}, denot
 \end{figure}
 \end{landscape}
 
-\subsection{Case Studies}
-\label{symcases}
+\subsection{Implementation}
 
-\subsubsection{Key-value store}
+We have implemented the symbolic evaluator described above as a new, optional, simplification pass within Inox' existing simplification pipeline. This pass can be enabled by specifying the \texttt{---sym-eval} flag on the command-line, or by setting to corresponding option using the Inox API.
+
+\subsection{Case Study: Key-value store}
+\label{symcases}
 
 \RefCode{lst:symkvstore} shows the implementation of a domain-specific language to manipulate a key-value store, along with a tracing interpreter over a Scala \stt{Map}. An simple program which makes use of this DSL to insert a list of concrete values into the store is shown in \RefCode{lst:symkvstoreinv}.
 
@@ -718,15 +870,13 @@ def interpret(op: Op)(kv: Map[String, String], trace: List[Label]) = op match {
 }
 \end{Code}
 
-\subsubsection{Futamura Projections}
-
-\TODO{Futamura projection}
-
 \subsection{Conclusion}
 
 \TODO{Conclusion}
 
 \subsection{Further Work}
+
+\subsubsection{Function Annotations}
 
 \TODO{Further work}
 
@@ -870,7 +1020,7 @@ self-reference is $n$, defined as $\emptyset_n := \stt{ActorContext}(n, \stt{Nil
 \dfrac{
   \not\exists m \in \stt{$s$.inboxes}(n_{from}, n_{to})
 }{
-  \langle \stt{$s$.step}(n_{from}, n_{to}) \rangle \longrightarrow \stt{s}
+  \stt{$s$.step}(n_{from}, n_{to}) \leadsto \stt{s}
 }
 \tag{STEP-NOMSG}
 \end{equation}
@@ -879,9 +1029,9 @@ self-reference is $n$, defined as $\emptyset_n := \stt{ActorContext}(n, \stt{Nil
 \begin{equation}
 \dfrac{
   \exists m \in \stt{$s$.inboxes}(n_{from}, n_{to}) \qquad
-  \langle \stt{$s$.deliverMsg}(n_{to}, n_{from}, m) \rangle \Rightarrow (b, ps, t)
+  \stt{$s$.deliverMsg}(n_{to}, n_{from}, m) \leadsto (b, ps, t)
 }{
-  \langle \stt{$s$.step}(n_{from}, n_{to}) \rangle \longrightarrow s \uplus (n_{to} \mapsto b, \ldots, t)
+  \stt{$s$.step}(n_{from}, n_{to}) \leadsto s \uplus (n_{to} \mapsto b, \ldots, t)
 }
 \tag{STEP}
 \end{equation}
@@ -889,9 +1039,9 @@ self-reference is $n$, defined as $\emptyset_n := \stt{ActorContext}(n, \stt{Nil
 \vspace{10pt}
 \begin{equation}
 \dfrac{
-  \langle \stt{$s$.behaviors($n_{to}$).processMsg}(m, \emptyset_{n_{to}}) \rangle \longrightarrow (b, c) 
+  \stt{$s$.behaviors($n_{to}$).processMsg}(m, \emptyset_{n_{to}}) \leadsto (b, c) 
 }{
-   \langle \stt{$s$.deliverMsg}(n_{to}, n_{from}, m) \rangle \longrightarrow (b, \stt{$c$.toSend}, t)
+  \stt{$s$.deliverMsg}(n_{to}, n_{from}, m) \leadsto (b, \stt{$c$.toSend}, t)
 }
 \tag{DELIVER-MSG}
 \end{equation}
@@ -899,10 +1049,10 @@ self-reference is $n$, defined as $\emptyset_n := \stt{ActorContext}(n, \stt{Nil
 \vspace{10pt}
 \begin{equation}
 \dfrac{
-  \stt{$b$.processMsg}(m, \emptyset_{n_{to}}) = [i_1, \ldots, i_n, b'] \qquad
-  \emptyset_{n_{to}} \vdash \langle [i_1, \ldots, i_n] \rangle \Rightarrow c
+  \stt{$b$.processMsg}(m, \emptyset_{n_{to}}) = i_1 ::\, \ldots ::\,i_n ::\, b' ::\,\stt{Nil} \qquad
+  \langle i_1 ::\, \ldots ::\,i_n ::\,\stt{Nil}, \emptyset_{n_{to}} \rangle \longrightarrow c
 }{
-   \langle \stt{$b$.processMsg}(m, \emptyset_{n_{to}}) \rangle \longrightarrow (b', c)
+   \stt{$b$.processMsg}(m, \emptyset_{n_{to}}) \leadsto (b', c)
 }
 \tag{PROCESS-MSG}
 \end{equation}
@@ -910,7 +1060,7 @@ self-reference is $n$, defined as $\emptyset_n := \stt{ActorContext}(n, \stt{Nil
 \vspace{10pt}
 \begin{equation}
 \dfrac{\empty}{
-   \langle \stt{Nil}, c \rangle \Rightarrow c
+   \langle \stt{Nil}, c \rangle \longrightarrow c
 }
 \tag{I-NIL}
 \end{equation}
@@ -918,17 +1068,19 @@ self-reference is $n$, defined as $\emptyset_n := \stt{ActorContext}(n, \stt{Nil
 \vspace{10pt}
 \begin{equation}
 \dfrac{
-  \langle i, c \rangle \Rightarrow c'
+  \langle i, c \rangle \longrightarrow c'
 }{
-  \langle \stt{$i$ :: $is$}, c \rangle \Rightarrow \langle is, c' \rangle
+  \langle \stt{$i ::\,is$}, c \rangle \Rightarrow \langle is, c' \rangle
 }
 \tag{I-CONS}
 \end{equation}
 
 \vspace{10pt}
 \begin{equation}
-\dfrac{\empty}{
-   \langle n\ \stt{!}\ m, c \rangle \Rightarrow (b',\ \stt{$c$.copy(toSend $\mapsto$ ($n, m$) :: $c$.toSend)})
+\dfrac{
+  \empty
+}{
+  \langle n\ \stt{!}\ m, c \rangle \longrightarrow (b',\ \stt{$c$.copy(toSend $\mapsto$ ($n$, $m$) $::$ $c$.toSend)})
 }
 \tag{I-SEND}
 \end{equation}
@@ -1093,11 +1245,11 @@ def invariant(s: ActorSystem): Boolean = {
 }
 \end{Code}
 
-
-
 \subsubsection{Lock Service}
 
 \RefCode{lst:LockService} shows the implementation of a lock service using our framework. In this case study, an actor acts as a server holding a lock on some resource, while a number of other actors (the "agents") act as clients of the lock service, each potentially trying to acquire the lock on the resource. To model a variable number of actors with the same implementation, we define their reference as a case class parametrized by a \TODO{unique} identifier.
+
+An obvious property we might want to prove is that, at any time, at most one of those agents thinks that it holds the lock. Additionally, we'd like to ensure that such an agent is actually the same one that the server granted the lock too. We express this property in \RefCode{lst:LockServiceInv}.
 
 \begin{Code}{PureScala}{lst:LockService}{Lock service implementation}
 case class Server() extends ActorRef
@@ -1106,9 +1258,7 @@ object Server {
   case class Unlock(agent: ActorRef) extends Msg
 }
 
-sealed abstract class AgentId
-
-case class Agent(id: AgentId) extends ActorRef
+case class Agent(id: Int) extends ActorRef
 object Agent {
   case object Lock   extends Msg
   case object Unlock extends Msg
@@ -1117,7 +1267,6 @@ object Agent {
 
 // The head of `agents` holds the lock, the tail are waiting for the lock
 case class ServerB(agents: List[ActorRef]) extends Behavior {
-
   def processMsg(msg: Msg)(implicit ctx: ActorContext): Behavior = msg match {
     case Server.Lock(agent) if agents.isEmpty =>
       agent ! Agent.Grant
@@ -1137,7 +1286,6 @@ case class ServerB(agents: List[ActorRef]) extends Behavior {
 }
 
 case class AgentB(holdsLock: Boolean) extends Behavior {
-
   def processMsg(msg: Msg)(implicit ctx: ActorContext): Behavior = msg match {
     case Agent.Lock =>
       Server() ! Server.Lock(ctx.self)
@@ -1155,8 +1303,6 @@ case class AgentB(holdsLock: Boolean) extends Behavior {
   }
 }
 \end{Code}
-
-An obvious property we might want to prove is that, at any time, at most one of those agents thinks that it holds the lock. Additionally, we'd like to ensure that such an agent is actually the same one that the server granted the lock too. We express this property in \RefCode{lst:LockServiceInv}.
 
 \begin{Code}{PureScala}{lst:LockServiceInv}{Lock service invariant}
 def hasLock(s: ActorSystem, a: ActorRef): Boolean = {
@@ -1429,6 +1575,7 @@ We now describe what it means for a linear term to be \textit{consumed}: a term 
 \item The term is assigned to a variable, eg. \stt{val s:\,Linear[A] = t}.
 \item The term is supplied as an argument to function, eg. given \stt{def f(x:\,Linear[A]):\,B}, we have $e = \stt{f(t)}$.
 \item The term is supplied as an argument to a method, eg. given a class \stt{C} with a method \stt{def m(x:\,Linear[A]):\,B}, a value $v:\, C$, we have $e = \stt{v.m(t)}$.
+\item The term is supplied as an argument to a lambda, eg. given \stt{val l:\,Linear[A] => B}, we have $e = \stt{l(t)}$.
 \item The term is supplied as an argument to a constructor, eg. given \stt{case class C(x: Linear[A])}, we have $e = \stt{C(t)}$.
 \end{itemize}
 
@@ -1451,7 +1598,15 @@ Fortunately for us, because a function's contract will be statically verified by
 
 \subsubsection*{Linear Data Types}
 
+\TODO{Discuss which types can contain linear fields}
+
 \subsubsection*{Marking the Current Object as Linear}
+
+\TODO{Discuss @linear annotation}
+
+\subsubsection*{Higher-Order Linear Functions}
+
+\TODO{Discuss syntax for linear lambdas}
 
 %\begin{landscape}
 %\begin{figure}[htb]
