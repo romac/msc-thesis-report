@@ -565,7 +565,37 @@ We subsequently denote the path condition by $\Delta$, and a formula $e$ that is
 }
 \end{equation}
 
-% TODO: Or/And
+\begin{equation}
+\dfrac{
+  \lb{e_1}{\Delta} \longrightarrow \stt{false}
+}{
+  \lb{\stt{$e_1$ \&\&\,\ldots\,\&\& $e_n$}}{\Delta} \longrightarrow \stt{false}
+}
+\end{equation}
+
+\begin{equation}
+\dfrac{
+	\lb{e_1}{\Delta} \longrightarrow e_1'
+}{
+  \lb{\stt{$e_1$ \&\&\,\ldots\,\&\& $e_n$}}{\Delta} \longrightarrow \stt{$e_1'$ \&\& } \lb{\stt{$e_2$ \&\&\,\ldots\,\&\& $e_n$}}{\Delta}
+}
+\end{equation}
+
+\begin{equation}
+\dfrac{
+  \lb{e_1}{\Delta} \longrightarrow \stt{true}
+}{
+  \lb{\stt{$e_1$ ||\,\ldots\,|| $e_n$}}{\Delta} \longrightarrow \stt{true}
+}
+\end{equation}
+
+\begin{equation}
+\dfrac{
+	\lb{e_1}{\Delta} \longrightarrow e_1'
+}{
+  \lb{\stt{$e_1$ ||,\ldots\,|| $e_n$}}{\Delta} \longrightarrow \stt{$e_1'$ || } \lb{\stt{$e_2$ ||,\ldots\,|| $e_n$}}{\Delta}
+}
+\end{equation}
 
 \begin{equation}
 \dfrac{
@@ -670,14 +700,6 @@ We subsequently denote the path condition by $\Delta$, and a formula $e$ that is
 }
 \end{equation}
 
-\begin{equation}
-\dfrac{
-  \stt{T:\,ADTType}
-}{
-  \lb{\stt{$e$.asInstanceOf[T]}}{\Delta} \longrightarrow \stt{$\lb{e}{\Delta}$.asInstanceOf[T]}
-}
-\end{equation}
-
 \end{framed}
 \vspace{-10pt}
 \caption{Operational semantics of the symbolic evaluator \label{fig:symbolicsem}}
@@ -690,6 +712,14 @@ We subsequently denote the path condition by $\Delta$, and a formula $e$ that is
 \centering
 %\begin{adjustwidth}{-1mm}{-1cm}
 \begin{framed}
+
+\begin{equation}
+\dfrac{
+  \stt{T:\,ADTType}
+}{
+  \lb{\stt{$e$.asInstanceOf[T]}}{\Delta} \longrightarrow \stt{$\lb{e}{\Delta}$.asInstanceOf[T]}
+}
+\end{equation}
 
 \begin{equation}
 \dfrac{
@@ -796,7 +826,7 @@ We subsequently denote the path condition by $\Delta$, and a formula $e$ that is
 
 \subsection{Implementation}
 
-We have implemented the symbolic evaluator described above as a new, optional, simplification pass within Inox' existing simplification pipeline. This pass can be enabled by specifying the \texttt{---sym-eval} flag on the command-line, or by setting to corresponding option using the Inox API.
+We have implemented the symbolic evaluator described above as a new, optional, simplification pass within Inox' existing simplification pipeline. This pass can be enabled by specifying the \texttt{---sym-eval} flag on the command-line, or by setting to corresponding option using the Inox API. The code can be found on GitHub\footnote{\url{https://github.com/romac/inox/tree/sym-eval}}.
 
 \subsection{Case Study: Key-value store}
 \label{symcases}
@@ -828,7 +858,7 @@ def lemma(map: Map[String, String], init: List[Label]) = {
 } holds
 \end{Code}
 
-While Stainless is unable to prove the verification condition associated with \stt{lemma}'s postcondition, turning on the symbolic evaluator yields the following VC, which it is then able to promptly prove is \texttt{UNSAT}, thus showing the property correct:
+While Inox is unable to prove the verification condition associated with \stt{lemma}'s postcondition, turning on the symbolic evaluator yields the following VC, which it is then able to promptly prove is \texttt{UNSAT}, thus showing the property correct:
 
 \begin{ShortCode}{PureScala}
 val x = (
@@ -880,9 +910,41 @@ def interpret(op: Op)(kv: Map[String, String], trace: List[Label]) = op match {
 
 \subsection{Further Work}
 
-\subsubsection{Function Annotations}
+\subsubsection*{Function Annotations}
 
-\TODO{Further work}
+Let's look at an interesting application of symbolic evaluation
+
+\begin{enumerate}
+\item Implement an interpreter $I(program, inputs)$ for a programming language $L$ in a host language $H$
+\item Write a program $p$ in language $L$
+\item Symbolically execute the interpreter $I$ over this program $p$ while keeping  $inputs$ abstract, ie. symbolically evaluate $I(p, inputs)$.
+\item They would end up with a "compiled" version of this program, represented as a program in the host language $H$. This resulting program could then be compiled to a lower-level language, and would have good chances of running much faster than the original program.
+
+This technique of partially evaluating an interpreter over a known program is known as the \textit{1st Futamura projection}, and can theoretically be applied to the symbolic evaluator itself, as per the 2nd and 3rd projections. \cite{futamura}
+
+It would thus be interesting to enable users to ask Stainless to symbolically evaluate a given function by annotating it with an annotation, and then either print the resulting PureScala program or just substitute it for the function's original body. We show below a simple example involving an interpreter for arithmetic expressions, as well as the result yielded by a preliminary experiment.
+
+\begin{ShortCode}{PureScala}
+sealed trait Expr
+case class Var(name: String)     extends Expr
+case class Num(value: Int)       extends Expr
+case class Add(l: Expr, r: Expr) extends Expr
+case class Mul(l: Expr, r: Expr) extends Expr
+
+def interpret(expr: Expr, ctx: Map[String, Int]): Int = expr match {
+  case Num(value) => value
+  case Var(name)  => ctx(name)
+  case Add(l, r)  => interpret(l, ctx) + interpret(r, ctx)
+  case Mul(l, r)  => interpret(l, ctx) * interpret(r, ctx)
+}
+
+val program: Expr = Mul(Num(10), Add(Var("x"), Num(2)))
+
+@symeval
+def compiled(ctx: Map[String, Int]): Int = {
+  interpret(program, ctx) // ==> 10 * (ctx("x") + 2)
+}
+\end{ShortCode}
 
 %------------------------------------------------------------------------
 
@@ -1601,7 +1663,11 @@ We now describe what it means for a linear term to be \textit{consumed}: a term 
 \item The term is supplied as an argument to a constructor, eg. given \stt{case class C(x: Linear[A])}, we have $e = \stt{C(t)}$.
 \end{itemize}
 
+\textit{Note: Method calls are subsumed by the first rule, as a linear value must first be delinearized with the \stt{!}\,operator before one can call a method on the underlying value.}\\
+
 We now must ensure that no linear term is \textit{consumed} more than once. To this end, we must recursively walk down the AST, while keeping track of terms that have been consumed in a \textit{usage context}, in order to disallow subsequent uses of those terms. We will denote this context by $\Delta$. \TODO{\RefFig{fig:lintypesrules} presents the type-checking rules used to reject invalid programs.}\\
+
+The astute reader will have noticed that the presence of the \stt{!}\,operator, if not handled carefully, would actually allow weakening. For example, given a value \stt{a:\,Linear[A]}, one could write \stt{val b:\, A = a.!}, and thus obtain a non-linear reference to the underlying value. To counter this, the linearity checker treats any expression of the form \stt{$e$.!}, with \stt{$e$:\,Linear[A]}, as having type \stt{Linear[A]} instead of \stt{A}.
 
 \subsubsection*{Preventing Contraction}
 
@@ -1659,27 +1725,31 @@ def k(x: BigInt): Linear[BigInt] = c match {
 
 \subsubsection*{Marking the Current Object as Linear}
 
-Another issue arise when dealing with data types meant to be introduced linearly if these have associated methods. To understand why, let's look at an example. \RefCode{lst:linfile} shows a very simple API which allows to ope a file, and read its content line-by-line. We would like to make sure that, once a user opens a file and receive the associated file handler, they must close the latter at some point.
+Another issue arise when dealing with data types meant to be introduced linearly if these have associated methods. To understand why, let's look at an example. \RefCode{lst:linfile} shows a very simple API which allows to open a file, read its content line-by-line, or read all its content at once. We would like to make sure that, once a user opens a \stt{File} and receives the associated \stt{FileHandler}, the latter must be closed. Unfortunately, when implementing the \stt{contents} method, nothing prevents the programmer to call \stt{readLine} twice on the current object. That is because, Within \stt{contents}, \stt{this} has type \stt{FileHandler}, and calling any method on it will thus not consume it. As it is not possible in Scala to constrain the type of the current object, even with self-annotations, we introduce a method annotation \stt{@linear} which signals to the linearity checker that, within an annotated method of a class \stt{C}, \stt{this} should be considered to have type \stt{Linear[C]}. As methods inherit the annotations of their enclosing class, it is here enough to annotate the \stt{FileHandler} class with \stt{@linear}.
 
 \begin{Code}{PureScala}{lst:linfile}{Linear File API}
+class File {
+  def open: Linear[FileHandler] = /* ... */
+}
+
 class FileHandler {
-  def readLine: (Option[String], Linear[FileHandler])
-  def close: Unit
+  def readLine: (Option[String], Linear[FileHandler]) = /* ... */
+  def close: Unit = /* ... */
+  
+  def contents: String = {
+    val (res, h) = this.readLine
+    doSomething(this.readLine) // should be disallowed
+    res match {
+      case Some(line) =>
+        line + h!.contents
+
+      case None() =>
+        h!.close
+        ""
+    }
+  }
 }
-
-class File(path: String) {
-  def open: Linear[FileHandler]
-}
-\end{Code}{PureScala}
-
-\begin{Code}{PureScala}{lst:linfile}{Linear File API}
-val h1 = File("test.txt").open
-val (line, h2) = h1.readLine
-h2.close
-line
-\end{Code}{PureScala}
-
-\TODO{Discuss @linear annotation}
+\end{Code}
 
 \subsubsection*{Higher-Order Linear Functions}
 
@@ -1876,13 +1946,11 @@ $\texttt{\textbf{\textcolor{Red}{Error}}}$: linear term cannot be discarded: con
 def atm(c: In[Authenticate]): Unit = {
   c ? { auth => auth! match {  
     case Authenticate(card, pin, cont) if authenticated(card, pin) =>
-    
-      // 3. do not wait for reply to `Success` message
+      // 3. do not wait for a reply to `Success` message
       cont !! Success(_)
   
     case Authenticate(_, _, cont) =>
-    
-      // 1. forgot the send back a Failure message
+      // 1. does not send back a Failure message
 
   } }
 }
@@ -1892,7 +1960,7 @@ def menu(card: String)(menu: Linear[Menu]): Unit = {
     case CheckBalance(cont) =>
       cont !! Balance(balance(card))(_) ? menu(card)
       
-       // 2. `cont` has already been used
+      // 2. `cont` has already been used
       doSomething(cont)
 
     case Quit() => ()
