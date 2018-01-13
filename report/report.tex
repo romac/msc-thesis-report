@@ -812,7 +812,7 @@ We subsequently denote the path condition by $\Delta$, and a formula $e$ that is
 
 \subsection{Termination}
 
-\TODO{Termination}
+
 
 \subsection{Implementation}
 
@@ -900,21 +900,17 @@ def interpret(op: Op)(kv: Map[String, String], trace: List[Label]) = op match {
 
 \subsection{Further Work}
 
-\subsubsection*{Function Annotations}
+\subsubsection*{Symbolic Evaluation of PureScala Progams in Stainless}
 
-Let's look at an interesting application of symbolic evaluation, and consider the following:
+The technique of symbolic evaluation is not limited to the simplification of verification conditions that we covered in this chapter. It can indeed also be used on its own over regular programs. For example, one could implement an interpreter for a (domain specific) language $L$ in PureScala, and then write a program $p$ in this language. One could then symbolically execute the interpreter  over this program $p$, keeping the the inputs or even the I/O operations abstract, yielding a PureScala expression. This resulting expression can be seen as a "compiled" version of the original program, represented as a PureScala program, which could then linked to a small runtime and be compiled to a lower-level language using the infrastructure provided by the Scala language itself, PureScala being a strict subset of Scala.\\
 
-\begin{enumerate}
-\item Implement an interpreter $I(program, inputs)$ for a programming language $L$ in a host language $H$
-\item Write a program $p$ in language $L$
-\item Symbolically execute the interpreter $I$ over this program $p$ while keeping  $inputs$ abstract, ie. symbolically evaluate $I(p, inputs)$.
-\item They would end up with a "compiled" version of this program, represented as a program in the host language $H$. This resulting program could then be compiled to a lower-level language, and would have good chances of running much faster than the original program.
+This technique of partially evaluating an interpreter over a known program is known as the \textit{1st Futamura projection} \cite{futamura}, and can theoretically be applied to the symbolic evaluator itself, yielding a compiler (the 2nd projection) or even a converter from any interpreter to a compiler (3rd projection).\\
 
-This technique of partially evaluating an interpreter over a known program is known as the \textit{1st Futamura projection}, and can theoretically be applied to the symbolic evaluator itself, as per the 2nd and 3rd projections. \cite{futamura}
+To enable such a use case, we propose adding a new annotation \stt{@symeval} to Stainless' standard library, which when present, would instruct Stainless to symbolically evaluate the annotated function, and substitute the resulting expression for the function's original body, while also printing or dumping the full PureScala program resulting from this transformation. This would enable users to use Stainless as a symbolic evaluator for PureScala program.\\
 
-It would thus be interesting to enable users to ask Stainless to symbolically evaluate a given function by annotating it with an annotation, and then either print the resulting PureScala program or just substitute it for the function's original body. We show below a simple example involving an interpreter for arithmetic expressions, as well as the result yielded by a preliminary experiment.
+We show below a simple example involving an interpreter for arithmetic expressions, as well as the result yielded by a preliminary experiment, which just hooks into the Inox pipeline and prints the result of the symbolic evaluation of any expression. More work is needed to properly integrate this feature within Stainless, which mainly consists of extending the symbolic evaluator with support for the full PureScala language constructs, such as pattern matches.
 
-\begin{ShortCode}{PureScala}
+\begin{Code}{PureScala}{lst:symevalex}{Application of the 1st Futamura projection to a simple interpreter and program}
 sealed trait Expr
 case class Var(name: String)     extends Expr
 case class Num(value: Int)       extends Expr
@@ -934,7 +930,7 @@ val program: Expr = Mul(Num(10), Add(Var("x"), Num(2)))
 def compiled(ctx: Map[String, Int]): Int = {
   interpret(program, ctx) // ==> 10 * (ctx("x") + 2)
 }
-\end{ShortCode}
+\end{Code}
 
 %------------------------------------------------------------------------
 
@@ -1419,7 +1415,7 @@ def invariant(s: ActorSystem): Boolean = {
 \subsection{Spawning Actors}
 \label{spawn}
 
-\TODO{Name Uniqueness}
+\subsubsection*{Updating The Model}
 
 Up until now, our framework has only been able to model Actor systems with a static topology, ie. systems where no new actors besides the ones that are statically defined can be spawned. Let's now attempt to enrich our model to account for dynamic topologies.
 
@@ -1428,7 +1424,7 @@ To this end, we modify the \ActorRef definition to include both a name and an op
 \begin{ShortCode}{PureScala}
 abstract class ActorRef(
   name: String,
-  parent: Option[ActorRef]
+  parent: Option[ActorRef] = None()
 )
 
 case class Child(name: String, getParent: ActorRef)
@@ -1454,22 +1450,11 @@ case class ActorContext(
 \end{ShortCode}
 
 As can be seen in the listing above, the context now keeps track of the names and 
-behaviors of the actors to be spawned, and provides a \stt{spawn} method which is in  charge of constructing the \ActorRef of the spawned actor, storing it along with the  behavior within the context, and returning the newly generated reference.\\
+behaviors of the actors to be spawned, and provides a \stt{spawn} method which is in  charge of constructing the \ActorRef of the spawned actor, storing it along with the  behavior within the context, and returning the newly generated reference.
 
-Let's now update the case study in \RefCode{lst:ReplicatedCounterInc} to accommodate 
-these changes, while noting that we are not making use of this new feature yet. Only 
-the two \ActorRef definitions need to be touched, becoming:
+\subsubsection*{Case Study}
 
-\begin{ShortCode}{PureScala}
-case object Primary extends ActorRef("primary", None())
-case object Backup  extends ActorRef("backup", None())
-\end{ShortCode}
-
-\TODO{Unfortunately, when we now feed the updated benchmark to Stainless, the latter is be  unable to prove the very same theorem it previously had no issue whatsoever with.
-All is not lost though, as turning on the symbolic evaluator described in
-\RefSec{symbolic} enables Stainless to verify the program in less than 10 seconds.}
-
-\RefCode{lst:spawncode} defines a simple system with a dynamic topology, where one actor, deemed \stt{Primary}, waits for a \stt{Spawn} message to spawn a child actor, and change its behavior from \stt{BeforeB} to \stt{AfterB} in order to keep track of the reference to the child. The invariant we would to verify holds here, states that, if the \stt{Primary} actor has behavior \stt{BeforeB()}, then the behavior associated with the \ActorRef of its child actor must be \stt{Stopped}. On the other hand, if the \stt{Primary} actor has behavior \stt{AfterB(child)}, then the behavior associated with \stt{child} must be \stt{ChildB}. This test case verifies promptly, provided the symbolic evaluator is enabled.
+\RefCode{lst:spawncode} defines a simple system with a dynamic topology, where one actor named \stt{Primary} waits for a \stt{Spawn} message to spawn a child actor, and change its behavior from \stt{BeforeB} to \stt{AfterB} in order to keep track of the reference to the child. The invariant we would to verify holds here, states that, if the \stt{Primary} actor has behavior \stt{BeforeB()}, then the behavior associated with the \ActorRef of its child actor must be \stt{Stopped}. On the other hand, if the \stt{Primary} actor has behavior \stt{AfterB(child)}, then the behavior associated with \stt{child} must be \stt{ChildB}. This test case verifies promptly, provided the symbolic evaluator is enabled.
 
 \begin{Code}{PureScala}{lst:spawncode}{}
 case object Primary extends ActorRef("primary")
@@ -1515,16 +1500,16 @@ def theorem(s: ActorSystem, from: ActorRef, to: ActorRef): Boolean = {
 \subsection{Running an Actor System on Akka}
 \label{akka}
 
-While the verification of Actor systems is in itself an interesting endeavour, it is not of much use unless one is able to run these systems, potentially in a distributed environment. In the Scala ecosystem, the most widely used real-world Actor system is Akka \TODO{REF}. \RefCode{lst:akkashim} shows a shallow shim which allows to run an Actor system developed with our framework within Akka, with only a few alterations to the original program.
+While the verification of Actor systems is in itself an interesting endeavour, it is not of much use unless one is able to run these systems, potentially in a distributed environment. In the Scala ecosystem, the most widely used real-world Actor system is Akka \TODO{REF}. \RefCode{lst:akkashim} shows a shallow shim which allows to run an Actor system developed with our framework within Akka, with only a few alterations to the original program. With this shim, the \ActorRef type is mapped to Akka's \ActorRef, while the \stt{ActorContext} now only contains the actor's self-reference, as well as the underlying Akka context. The shim also defines an actual Akka actor, parametrized by an underlying \stt{Behavior}, to which all messages of type \stt{Msg} will be delegated. The \stt{ActorSystem} class becomes abstract, and concrete subclasses need to provide it with an actual Akka system, as well as provide an implementation of its \stt{run} method. Within this method, one can spawn new top-level actors, get a reference to those, and send them messages. \RefCode{lst:akkashimex} shows such an implementation for the replicated counter described in \RefSec{repcounterinc}.
 
-\begin{Code}{PureScala}{lst:akkashim}{Akka shim for our Actor system framework}
+\begin{Code}{PureScala}{lst:akkashim}{Akka shim for our Actor framework}
 import akka.actor
 
 type ActorRef = actor.ActorRef
 
 case class ActorContext(self: actor.ActorRef, ctx: actor.ActorContext)
 
-class Wrapper(var behavior: Behavior)
+class AkkaWrapper(var behavior: Behavior)
   extends actor.Actor with actor.ActorLogging {
 
   implicit val ctx = ActorContext(self, context)
@@ -1538,20 +1523,14 @@ class Wrapper(var behavior: Behavior)
   }
 }
 
-abstract class ActorSystem(val name: String) {
-  lazy val system = actor.ActorSystem(name)
-
+abstract class ActorSystem(val system: actor.ActorSystem) {
   def spawn(behavior: Behavior, name: String): actor.ActorRef = {
-    system.actorOf(actor.Props(new Wrapper(behavior)), name = name)
+    system.actorOf(actor.Props(new AkkaWrapper(behavior)), name = name)
   }
 
   def run(): Unit
 }
 \end{Code}
-
-\TODO{Explain shim}
-
-To this end, one must define a subclass of \stt{ActorSystem}, and provide an implementation of its \stt{run} method. Within this method, one can spawn new top-level actors, get a reference to those, and send them messages. \RefCode{lst:akkashimex} shows such an implementation for the replicated counter described in \RefSec{repcounterinc}. 
 
 \begin{Code}{PureScala}{lst:akkashimex}{Akka shim for our Actor system framework}
 @extern
@@ -1576,7 +1555,13 @@ def main(args: Array[String]): Unit = {
 
 \subsection{Further Work}
 
-\TODO{Further work}
+\subsubsection*{Real-world Case Study}
+
+\subsubsection*{Weaker Guarantees On Message Delivery}
+
+\subsubsection*{Name Uniqueness}
+
+It is important to note that, within this model, actor references are not guaranteed to be unique as a user could spawn two actors with the same name. \TODO{++}
 
 %\clearpage
 %\section{Verification of Conflict-Free Replicated Data Types}
