@@ -373,7 +373,7 @@ val y = -x
 
 \subsubsection{Example}
 
-Here is how the \textit{PureScala} program above is expressed in Inox's input language, formatted in \textit{PureScala} syntax:
+Here is how the \textit{PureScala} program above is expressed in Inox's input language, formatted in PureScala syntax:
 
 \begin{ShortCode}{PureScala}
 def foldLeft[A](list: List[A], z: B, f: (B, A) => B): B =
@@ -425,19 +425,11 @@ val res = foldLeft(
 )
 \end{ShortCode}
 
-\item \stt{foldLeft} is a recursive function, and some care is thus needed here. We look at its body and find a toplevel "if-else" statement. We now ask ourselves whether or not its condition can be reduced to a boolean literal under the current path condition, ie. whether \stt{list.isInstanceOf[Nil]} evaluates to \stt{true} or \stt{false} given that \stt{list = Cons("a" -> 1, ...)}. It is clear here that this expression reduces to \stt{false}, and we can thus unfold \stt{foldLeft}'s definition and continue:
+\item \stt{foldLeft} is a recursive function, and some care is thus needed in order to not end up unfolding it indefinitely.\\
 
-\begin{ShortCode}{PureScala}
-val res = if (Cons("a" -> 1, Cons("b" -> 2, ...)).isInstanceOf[Nil[A]]) {
-  map
-} else {
-  val x  = Cons("a" -> 1, Cons("b" -> 2, ...)).asInstanceOf[Cons[A]].head
-  val xs = Cons("a" -> 1, Cons("b" -> 2, ...)).asInstanceOf[Cons[A]].tail
-  foldLeft(xs, ((acc, kv) => ...)(z, x), (acc, kv) => ...)
-}
-\end{ShortCode}
+The idea here is that a recursive function must contain a \textit{guarded} recursive call to be terminating, as it would otherwise call itself recursively indefinitely and thus not terminate (we discuss termination in more detail in \RefSec{termination}). We can thus look at the function's body, and see whether it contains a conditional expression whose condition can be reduced to a boolean literal under the current path condition. If that is not the case, we cannot safely unfold the function and we stop here. Otherwise, we can replace the conditional expression by its appropriate branch, and evaluate the resulting expression under the new path condition induced by the condition. As long as the function is terminating, this process will terminate as we are either going to end up with a branch that does not contain a recursive call, or we will not be able to evaluate the condition to a boolean value and will thus not proceed further.\\
 
-\item Once again, we see that the condition evaluates to \stt{false}, and we thus replace the "if-else" statement by its "else" branch (note: our implementation actually performs this step and the previous one in go for performance):
+In the case of \stt{foldLeft}, there is indeed such a conditional expression, and under the current path condition, we are able to evaluate \stt{list.isInstanceOf[Nil]} to \stt{false} given that the path condition contains \stt{list = Cons("a" -> 1, ...)}. We can thus unfold it, replace the "if-then-else" expression by its "else" branch, and continue:
 
 \begin{ShortCode}{PureScala}
 val res = {
@@ -457,7 +449,7 @@ val res = {
 }
 \end{ShortCode}
 
-\item We now inline both bindings:
+\item We now inline both bindings (again, in one go for the sake of brevity):
 
 \begin{ShortCode}{PureScala}
 val res = {
@@ -469,7 +461,7 @@ val res = {
 }
 \end{ShortCode}
 
-\item And we now evaluate the arguments supplied to \stt{foldLeft}, giving us:
+\item We can then evaluate the arguments supplied to \stt{foldLeft}, giving us:
 
 \begin{ShortCode}{PureScala}
 val res = {
@@ -481,7 +473,7 @@ val res = {
 }
 \end{ShortCode}
 
-\item We now repeat steps 3 to 7 until we have traversed the entire list, leaving us with:
+\item As we have encountered another call to a recursive function, we repeat steps 3 to 6 three times, at which point we are left with:
 
 \begin{ShortCode}{PureScala}
 val res = {
@@ -493,23 +485,13 @@ val res = {
 }
 \end{ShortCode}
 
-\item We once again look ahead and see that, this time, the condition will evaluate to \stt{true}, and can thus unfold \stt{foldLeft} once again, getting us to:
-
-\begin{ShortCode}{PureScala}
-val res = if (Nil().isInstanceOf[Nil[A]]) {
-  map.updated("a", 1).updated("b", 2).updated("c", 3).updated("d", 4)
-} else {
-  val x  = Nil().asInstanceOf[Cons[A]].head
-  val xs = Nil().asInstanceOf[Cons[A]].tail
-  foldLeft(xs, ((acc, kv) => ...)(z, x), (acc, kv) => ...)
-}
-\end{ShortCode}
-
-\item This time we pick the "then" branch, and end up the following expression, which we cannot reduce further, as \stt{map} is abstract and \stt{updated} is a special language construct which can only be evaluated when applied to a concrete, finite map:
+\item This time, in step 3, the condition evaluates to \stt{true}, and we thus pick the "then" branch which leaves us with the following expression:
 
 \begin{ShortCode}{PureScala}
 val res = map.updated("a", 1).updated("b", 2).updated("c", 3).updated("d", 4)
 \end{ShortCode}
+
+\item This expression cannot be reduced further, as \stt{map} is abstract and \stt{updated} is a special language construct which can only be evaluated when applied to a concrete, finite map. We thus stop here.
 
 \end{enumerate}
 
@@ -543,7 +525,7 @@ We subsequently denote the path condition by $\Delta$, and a formula $e$ that is
 
 \begin{equation}
 \dfrac{
-  \neg e \in \Delta
+  \neg\, e \in \Delta
 }{
   \lb{e}{\Delta} \longrightarrow \stt{false}
 }
@@ -551,17 +533,17 @@ We subsequently denote the path condition by $\Delta$, and a formula $e$ that is
 
 \begin{equation}
 \dfrac{
-  \empty
+  \lb{e}{\Delta} \longrightarrow e'
 }{
-  \lb{\lambda x_1, \ldots, x_n.\, e}{\Delta} \longrightarrow \lambda \lb{x_1}{\Delta}, \ldots, \lb{x_n}{\Delta}.\, \lb{e}{\Delta}
+  \lb{\lambda x_1, \ldots, x_n.\, e}{\Delta} \longrightarrow \lambda x_1, \ldots, x_n.\, e'
 }
 \end{equation}
 
 \begin{equation}
 \dfrac{
-  \empty
+  \lb{\neg\,l \stt{ || } r}{\Delta} \longrightarrow e'
 }{
-  \lb{\stt{$l$ ==> $r$}}{\Delta} \longrightarrow \lb{\neg l \stt{ || } r}{\Delta}
+  \lb{\stt{$l$ ==> $r$}}{\Delta} \longrightarrow e'
 }
 \end{equation}
 
@@ -575,9 +557,10 @@ We subsequently denote the path condition by $\Delta$, and a formula $e$ that is
 
 \begin{equation}
 \dfrac{
-	\lb{e_1}{\Delta} \longrightarrow e_1'
+  \lb{e_1}{\Delta} \longrightarrow e_1' \qquad
+  \lb{\stt{$e_2$ \&\&\,\ldots\,\&\& $e_n$}}{\Delta} \longrightarrow e'
 }{
-  \lb{\stt{$e_1$ \&\&\,\ldots\,\&\& $e_n$}}{\Delta} \longrightarrow \stt{$e_1'$ \&\& } \lb{\stt{$e_2$ \&\&\,\ldots\,\&\& $e_n$}}{\Delta}
+  \lb{\stt{$e_1$ \&\&\,\ldots\,\&\& $e_n$}}{\Delta} \longrightarrow \stt{$e_1'$ \&\& } e' 
 }
 \end{equation}
 
@@ -591,9 +574,10 @@ We subsequently denote the path condition by $\Delta$, and a formula $e$ that is
 
 \begin{equation}
 \dfrac{
-	\lb{e_1}{\Delta} \longrightarrow e_1'
+  \lb{e_1}{\Delta} \longrightarrow e_1' \qquad
+  \lb{\stt{$e_2$ ||,\ldots\,|| $e_n$}}{\Delta} \longrightarrow e'
 }{
-  \lb{\stt{$e_1$ ||,\ldots\,|| $e_n$}}{\Delta} \longrightarrow \stt{$e_1'$ || } \lb{\stt{$e_2$ ||,\ldots\,|| $e_n$}}{\Delta}
+  \lb{\stt{$e_1$ ||,\ldots\,|| $e_n$}}{\Delta} \longrightarrow \stt{$e_1'$ || } e'
 }
 \end{equation}
 
@@ -609,27 +593,27 @@ We subsequently denote the path condition by $\Delta$, and a formula $e$ that is
 \dfrac{
   \lb{c}{\Delta} \longrightarrow \stt{false}
 }{
-  \lb{\stt{if ($c$) $t$ else $e$}}{\Delta} \longrightarrow \lb{e}{\Delta \cup c}
+  \lb{\stt{if ($c$) $t$ else $e$}}{\Delta} \longrightarrow \lb{e}{\Delta \cup \neg \,c}
 }
 \end{equation}
+
+%\begin{equation}
+%\dfrac{
+%  \lb{c}{\Delta} \longrightarrow c' \qquad
+%  \lb{t}{\Delta \cup c'} \longrightarrow t' \qquad
+%  \lb{e}{\Delta \cup \neg c'} \longrightarrow e' \qquad
+%  t' = e'
+%}{
+%  \lb{\stt{if ($c$) $t$ else $e$}}{\Delta} \longrightarrow t'
+%}
+%\end{equation}
 
 \begin{equation}
 \dfrac{
   \lb{c}{\Delta} \longrightarrow c' \qquad
   \lb{t}{\Delta \cup c'} \longrightarrow t' \qquad
-  \lb{e}{\Delta \cup \neg c'} \longrightarrow e' \qquad
-  t' = e'
-}{
-  \lb{\stt{if ($c$) $t$ else $e$}}{\Delta} \longrightarrow t'
-}
-\end{equation}
-
-\begin{equation}
-\dfrac{
-  \lb{c}{\Delta} \longrightarrow c' \qquad
-  \lb{t}{\Delta \cup c'} \longrightarrow t' \qquad
-  \lb{e}{\Delta \cup \neg c'} \longrightarrow e' \qquad
-  t' \neg= e'
+  \lb{e}{\Delta \cup \neg\, c'} \longrightarrow e' \qquad
+%  t' \not= e'
 }{
   \lb{\stt{if ($c$) $t$ else $e$}}{\Delta} \longrightarrow \stt{if ($c'$) $t'$ else $e'$}
 }
@@ -637,27 +621,29 @@ We subsequently denote the path condition by $\Delta$, and a formula $e$ that is
 
 \begin{equation}
 \dfrac{
-  \lb{p}{\Delta} \longrightarrow \stt{true}
+  \lb{p}{\Delta} \longrightarrow \stt{true} \qquad
+  \lb{e}{\Delta} \longrightarrow e'
 }{
-  \lb{\stt{assume($p$, $e$)}}{\Delta} \longrightarrow \lb{e}{\Delta}
+  \lb{\stt{assume($p$); $e$}}{\Delta} \longrightarrow e'
 }
 \end{equation}
 
 \begin{equation}
 \dfrac{
-  \lb{p}{\Delta} \longrightarrow \stt{false}
+  \lb{p}{\Delta} \longrightarrow \stt{false} \qquad
+  \lb{e}{\Delta} \longrightarrow e'
 }{
-  \lb{\stt{assume($p$, $e$)}}{\Delta} \longrightarrow
-  \stt{assume(false, $\lb{e}{\Delta}$}
+  \lb{\stt{assume($p$); $e$}}{\Delta} \longrightarrow \stt{assume(false); $e'$}
 }
 \end{equation}
 
 \begin{equation}
 \dfrac{
-  \lb{p}{\Delta} \longrightarrow p'
+  \lb{p}{\Delta} \longrightarrow p' \qquad
+  \lb{e}{\Delta \cup p'} \longrightarrow e'
 }{
-  \lb{\stt{assume($p$, $e$)}}{\Delta} \longrightarrow
-  \stt{assume($p'$, $\lb{e}{\Delta \cup p'}$)}
+  \lb{\stt{assume($p$); $e$}}{\Delta} \longrightarrow
+  \stt{assume($p'$); $e'$}
 }
 \end{equation}
 
@@ -814,7 +800,7 @@ We subsequently denote the path condition by $\Delta$, and a formula $e$ that is
   (\stt{cons}, (e_1, \ldots, e_n)) = \stt{deconstruct(e)} \quad
   \lb{e_i}{\Delta} \longrightarrow e_i',\, i \in \{1 \ldots n\}
 }{
-  \lb{e}{\Delta} \longrightarrow \stt{cons}(e_1', \ldots, e_2')
+  \lb{e}{\Delta} \longrightarrow \stt{cons}(e_1', \ldots, e_n')
 }
 \end{equation}
 
@@ -823,6 +809,10 @@ We subsequently denote the path condition by $\Delta$, and a formula $e$ that is
 \caption{Operational semantics of the symbolic evaluator \label{fig:symbolicsem}}
 \end{figure}
 \end{landscape}
+
+\subsection{Termination}
+
+\TODO{Termination}
 
 \subsection{Implementation}
 
@@ -912,7 +902,7 @@ def interpret(op: Op)(kv: Map[String, String], trace: List[Label]) = op match {
 
 \subsubsection*{Function Annotations}
 
-Let's look at an interesting application of symbolic evaluation
+Let's look at an interesting application of symbolic evaluation, and consider the following:
 
 \begin{enumerate}
 \item Implement an interpreter $I(program, inputs)$ for a programming language $L$ in a host language $H$
@@ -1279,16 +1269,16 @@ def preserveInv(s: ActorSystem, n: ActorRef, m: ActorRef): Boolean = {
 \RefCode{lst:ReplicatedCounterDel} shows a variant of the previous case study, where instead of having the primary actor forward the \stt{Inc()} message to the backup actor, the former instead sends the latter the new value.
 
 \begin{Code}{PureScala}{lst:ReplicatedCounterDel}{Delivery-based Replicated counter implementation}
-case class Primary() extends ActorRef
-case class Backup()  extends ActorRef
+case object Primary extends ActorRef
+case object Backup  extends ActorRef
 
-case class Inc() extends Msg
+case object Inc extends Msg
 case class Deliver(c: BigInt) extends Msg
 
 case class PrimaryB(counter: BigInt) extends Behavior {
   def processMsg(msg: Msg)(implicit ctx: ActorContext): Behavior = msg match {
-    case Inc() =>
-      Backup() ! Deliver(counter + 1)
+    case Inc =>
+      Backup ! Deliver(counter + 1)
       PrimaryB(counter + 1)
 
     case _ => Behavior.same
@@ -1306,14 +1296,22 @@ case class BackupB(counter: BigInt) extends Behavior {
 The invariant now reads slightly differently, as can be seen in \RefCode{lst:ReplicatedCounterDelInv}.
 
 \begin{Code}{PureScala}{lst:ReplicatedCounterDelInv}{Delivery-based replicated counter invariant}
+def validBehaviors(s: ActorSystem): Boolean = {
+  (s.behaviors(Primary), s.behaviors(Backup) match {
+    case (p: PrimaryB, b: BackupB) => true
+    case _                         => false
+  }
+}
+
 def invariant(s: ActorSystem): Boolean = {
-  validBehaviors(s)                           &&
-  noMsgsToSelf(Primary()).isEmpty             &&
-  noMsgsToSelf(Backup()).isEmpty              &&
-  noMsgsToSelf(Backup() -> Primary()).isEmpty && {
-    val PrimBehav(p) = s.behaviors(Primary())
-    val BackBehav(b) = s.behaviors(Backup())
-    val bInbox       = s.inboxes(Primary() -> Backup())
+  validBehaviors(s)                       &&
+  s.inboxes(Primary -> Primary).isEmpty   &&
+  s.inboxes(Backup -> Backup).isEmpty     &&
+  noMsgsToSelf(Backup -> Primary).isEmpty &&
+  {
+    val PrimaryB(p) = s.behaviors(Primary)
+    val BackupB(b)  = s.behaviors(Backup)
+    val bInbox      = s.inboxes(Primary -> Backup)
 
     p.value >= b.value && isSorted(bInbox) && bInbox.forall {
       case Deliver(Counter(i)) => p.value >= i
@@ -1463,14 +1461,13 @@ these changes, while noting that we are not making use of this new feature yet. 
 the two \ActorRef definitions need to be touched, becoming:
 
 \begin{ShortCode}{PureScala}
-case class Primary() extends ActorRef("primary", None())
-case class Backup()  extends ActorRef("backup", None())
+case object Primary extends ActorRef("primary", None())
+case object Backup  extends ActorRef("backup", None())
 \end{ShortCode}
 
-Unfortunately, when we now feed the updated benchmark to Stainless, the latter is be 
-unable to prove the very same theorem it previously had no issue whatsoever with.
+\TODO{Unfortunately, when we now feed the updated benchmark to Stainless, the latter is be  unable to prove the very same theorem it previously had no issue whatsoever with.
 All is not lost though, as turning on the symbolic evaluator described in
-\RefSec{symbolic} enables Stainless to verify the program in less than 10 seconds.\\
+\RefSec{symbolic} enables Stainless to verify the program in less than 10 seconds.}
 
 \RefCode{lst:spawncode} defines a simple system with a dynamic topology, where one actor, deemed \stt{Primary}, waits for a \stt{Spawn} message to spawn a child actor, and change its behavior from \stt{BeforeB} to \stt{AfterB} in order to keep track of the reference to the child. The invariant we would to verify holds here, states that, if the \stt{Primary} actor has behavior \stt{BeforeB()}, then the behavior associated with the \ActorRef of its child actor must be \stt{Stopped}. On the other hand, if the \stt{Primary} actor has behavior \stt{AfterB(child)}, then the behavior associated with \stt{child} must be \stt{ChildB}. This test case verifies promptly, provided the symbolic evaluator is enabled.
 
