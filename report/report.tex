@@ -306,6 +306,7 @@
 \label{symbolic}
 
 \subsection{Motivation}
+\label{symbolic-motivation}
 
 Consider the following program, which inserts a known list of key-value pairs in a map that is kept abstract:
 
@@ -347,33 +348,35 @@ We believe that it is unreasonable to expect users to manually perform such a tr
 
 \subsection{Symbolic Evaluation}
 
-The process of simplifying a program by evaluating it as much as possible, even in the presence of unknown inputs is often referred to as \textit{symbolic evaluation}. The idea is to execute the program over symbolic inputs values while maintaining a \textit{path condition}, ie. a quantifier-free formula in conjunctive normal form that represents the constraints over the inputs we have discovered so far, as well as the branching decisions made. The actual implementation also keeps track of bound variables in a specific way for performance.
+The process of executing a program in the presence of abstract inputs is known as \textit{symbolic evaluation}. The idea is to execute the program over symbolic inputs values while maintaining a \textit{path condition}: a quantifier-free formula in conjunctive normal form that represents constraints over the symbolic variables we have encountered so far. The path condition encodes the knowledge we have gathered so far about the symbolic values we are dealing with, as well as the bindings in scope. At each evaluation step, the evaluator can query the path condition $p$ in order to hopefully determine to which of its branches a conditional expression \stt{if ($c$) $t$ else $e$} should be reduced. We start by  symbolically evaluating $c$ under the current path condition, the result of which we will denote by $c'$. If $c'$ is a boolean literal, we then evaluate the appropriate branch, and continue from here. Otherwise, we add $c'$ as a conjunct to the path condition $p$, and check whether the resulting formula $p \wedge c'$ is satisfiable. If we are able to show that it is indeed satisfiable, we evaluate the "then" branch of the conditional expression under new path condition $p \wedge c'$. Otherwise, we instead check whether the formula $p \wedge \neg\,c'$ is satisfiable, and if that is the case we evaluate the "else" branch under the new path condition $p \wedge \neg\,c'$. If we are unable to show that either formula is satisfiable, we evaluate both branches under their respective path condition, the result of which we will denote by $t'$ and $e'$, respectively, and we return $if (c') t' else e;$. \\
 
-\RefCode{lst:PC} shows a simple program annotated with the current path condition are various points of execution. When evaluating such a program symbolically, the path condition enables the evaluator to pick the "else" branch of the "if-then-else" expression, because, under the current path condition, the formula \stt{x <= 0}, \stt{x > 0} is unsatisfiable. As a result of the symbolic evaluation, the resulting program is now equivalent to the code featured in \RefCode{lst:PCres}.
+\RefCode{lst:PC} shows a simple program annotated with the current path condition are various points of execution. When evaluating such a program symbolically, the path condition enables the evaluator to pick the "else" branch of the "if-then-else" expression, because, under the path condition at step 2, the condition \stt{x > 0} evaluates to \stt{false}.
 
-\begin{Code}{PureScala}{lst:PC}{Initial program with path condition}
-// 1. PC = true
-assume(x <= 0)
-// 2. PC = x <= 0
-val y = if (x > 0) {
-  // 2. PC = x <= 0 && x > 0
-  x
-} else {
-  // 3. PC = x <= 0
-  -x
+\begin{Code}{PureScala}{lst:PC}{Example program annotated with path condition}
+// Expression before evaluation:
+{
+  // 1. PC = true
+  assume(x <= 0)
+  // 2. PC = x <= 0
+  if (x > 0) {
+    // 3. PC = x <= 0 && x > 0
+    x
+  } else {
+    // 4. PC = x <= 0 && !(x > 0)
+    -x
+  }
 }
-// 4. PC = y == -x && x <= 0
-\end{Code}
 
-\begin{Code}{PureScala}{lst:PCres}{Simplified program}
-assume(x <= 0)
-val y = -x
-// PC = x <= 0 && y == -x
+// Resulting expression after evaluation:
+{
+  assume(x <= 0)
+  bar(-x)
+}
 \end{Code}
 
 \subsubsection{Example}
 
-Here is how the \textit{PureScala} program above is expressed in Inox's input language, formatted in PureScala syntax:
+Here is how the program we introduced in \RefSec{symbolic-motivation} is expressed in Inox's input language, formatted in PureScala syntax:
 
 \begin{ShortCode}{PureScala}
 def foldLeft[A](list: List[A], z: B, f: (B, A) => B): B =
@@ -506,7 +509,7 @@ def test(map: Map[String, Int]): Boolean = {
 
 \subsection{Semantics}
 
-We subsequently denote the path condition by $\Delta$, and a formula $e$ that is satisfiable under $\Delta$ by $e \in \Delta$. We will not delve into the details of how to decide whether a given condition is satisfiable under some path condition, but a reasonable although much too simplistic approximation would be to maintain a set of expressions and simply testing for membership. The actual implementation found in Inox (which predates our work) is much more complex and powerful implementation of this very idea. Moreover, we denote the fact that an expression $e$ evaluates to an expression $e'$ under a path condition $\Delta$ by $\lb{e}{\Delta} \longrightarrow e'$. Given $c, v$ two expressions, and \stt{x} a variable, we note $\Delta \cup c$ the addition of $c$ to the path condition $\Delta$, and $\Delta \uplus x \mapsto v$ the addition of the binding \stt{val x = $v$}. At last, the fact that an expression $e$ can be simplified to a boolean value under a path condition $\Delta$ is captured by $\stt{e} \Downarrow \Delta$. \RefFig{fig:symbolicsem} shows the operation semantics followed by our implementation, expressed in those terms.
+We subsequently denote the path condition by $\Delta$, a formula $e$ that is satisfiable under $\Delta$ by $e \in \Delta$. and a variable $v$ that is bound to an expression $e$ under $\Delta$ by $v \mapsto_\Delta e$. We will not delve into the details of how to decide whether a given condition is satisfiable under some path condition, but a reasonable although much too simplistic approximation would be to maintain a set of expressions and simply testing for membership. The actual implementation found in Inox (which predates our work) is much more complex and powerful implementation of this very idea. Moreover, we denote the fact that an expression $e$ evaluates to an expression $e'$ under a path condition $\Delta$ by $\lb{e}{\Delta} \longrightarrow e'$. Given $c, v$ two expressions, and \stt{x} a variable, we note $\Delta \cup c$ the addition of $c$ as a conjunct to the path condition $\Delta$, and $\Delta \uplus x \mapsto v$ the addition of the binding \stt{val x = $v$}. At last, the fact that an expression $e$ can be simplified to a boolean value under a path condition $\Delta$ is captured by $\stt{e} \Downarrow \Delta$. \RefFig{fig:symbolicsem} shows the operation semantics followed by our implementation, expressed in those terms.
 
 %\begin{itemize}
 %\item \textbf{Rule 1.} 
@@ -514,6 +517,14 @@ We subsequently denote the path condition by $\Delta$, and a formula $e$ that is
 
 \begin{figure}[htb]
 \begin{framed}
+
+\begin{equation}
+\dfrac{
+  v \mapsto_\Delta e
+}{
+  \lb{v}{\Delta} \longrightarrow e
+}
+\end{equation}
  
 \begin{equation}
 \dfrac{
@@ -787,20 +798,20 @@ We subsequently denote the path condition by $\Delta$, and a formula $e$ that is
 
 \begin{equation}
 \dfrac{
- e = \stt{if ($c$) $t_1$ else $t_2$} \quad
- \lb{c}{\Delta} \longrightarrow r \quad
- r \in \{\stt{true}, \stt{false}\}
+  (\stt{cons}, (e_1, \ldots, e_n)) = \stt{deconstruct(e)} \quad
+  \lb{e_i}{\Delta} \longrightarrow e_i',\, i \in \{1 \ldots n\}
 }{
-  \stt{e} \Downarrow \Delta
+  \lb{e}{\Delta} \longrightarrow \stt{cons}(e_1', \ldots, e_n')
 }
 \end{equation}
 
 \begin{equation}
 \dfrac{
-  (\stt{cons}, (e_1, \ldots, e_n)) = \stt{deconstruct(e)} \quad
-  \lb{e_i}{\Delta} \longrightarrow e_i',\, i \in \{1 \ldots n\}
+ e = \stt{if ($c$) $t_1$ else $t_2$} \quad
+ \lb{c}{\Delta} \longrightarrow r \quad
+ r \in \{\stt{true}, \stt{false}\}
 }{
-  \lb{e}{\Delta} \longrightarrow \stt{cons}(e_1', \ldots, e_n')
+  \stt{e} \Downarrow \Delta
 }
 \end{equation}
 
@@ -812,11 +823,11 @@ We subsequently denote the path condition by $\Delta$, and a formula $e$ that is
 
 \subsection{Termination}
 
-
+We argue that, when ran over a program that Stainless deems terminating, the symbolic evaluator whose semantics are given in \RefFig{fig:symbolicsem} terminates as well. We will first note that, for a recursive function expressed in PureScala to be  terminating, the recursive calls must be guarded by a conditional expression, as it would otherwise call itself repeatedly without end. Because we only ever unfold a recursive function  (Wrong, find counter example)
 
 \subsection{Implementation}
 
-We have implemented the symbolic evaluator described above as a new, optional, simplification pass within Inox' existing simplification pipeline. This pass can be enabled by specifying the \texttt{---sym-eval} flag on the command-line, or by setting to corresponding option using the Inox API. The code can be found on GitHub\footnote{\url{https://github.com/romac/inox/tree/sym-eval}}.
+We have implemented the symbolic evaluator described above as a new, optional, simplification pass within Inox's existing simplification pipeline. This pass can be enabled by specifying the \texttt{---sym-eval} flag on the command-line, or by setting to corresponding option using the Inox API. The code can be found on GitHub\footnote{\url{https://github.com/romac/inox/tree/sym-eval}}.
 
 \subsection{Case Study: Key-value store}
 \label{symcases}
@@ -900,13 +911,18 @@ def interpret(op: Op)(kv: Map[String, String], trace: List[Label]) = op match {
 
 \subsection{Further Work}
 
-\subsubsection*{Symbolic Evaluation of PureScala Progams in Stainless}
+
+\subsubsection*{Path Condition Satisfiability Improvements}
+
+\TODO{PC SMT}
+
+\subsubsection*{Symbolic Evaluation of PureScala Programs in Stainless}
 
 The technique of symbolic evaluation is not limited to the simplification of verification conditions that we covered in this chapter. It can indeed also be used on its own over regular programs. For example, one could implement an interpreter for a (domain specific) language $L$ in PureScala, and then write a program $p$ in this language. One could then symbolically execute the interpreter  over this program $p$, keeping the the inputs or even the I/O operations abstract, yielding a PureScala expression. This resulting expression can be seen as a "compiled" version of the original program, represented as a PureScala program, which could then linked to a small runtime and be compiled to a lower-level language using the infrastructure provided by the Scala language itself, PureScala being a strict subset of Scala.\\
 
 This technique of partially evaluating an interpreter over a known program is known as the \textit{1st Futamura projection} \cite{futamura}, and can theoretically be applied to the symbolic evaluator itself, yielding a compiler (the 2nd projection) or even a converter from any interpreter to a compiler (3rd projection).\\
 
-To enable such a use case, we propose adding a new annotation \stt{@symeval} to Stainless' standard library, which when present, would instruct Stainless to symbolically evaluate the annotated function, and substitute the resulting expression for the function's original body, while also printing or dumping the full PureScala program resulting from this transformation. This would enable users to use Stainless as a symbolic evaluator for PureScala program.\\
+To enable such a use case, we propose adding a new annotation \stt{@symeval} to Stainless's standard library, which when present, would instruct Stainless to symbolically evaluate the annotated function, and substitute the resulting expression for the function's original body, while also printing or dumping the full PureScala program resulting from this transformation. This would enable users to use Stainless as a symbolic evaluator for PureScala program.\\
 
 We show below a simple example involving an interpreter for arithmetic expressions, as well as the result yielded by a preliminary experiment, which just hooks into the Inox pipeline and prints the result of the symbolic evaluation of any expression. More work is needed to properly integrate this feature within Stainless, which mainly consists of extending the symbolic evaluator with support for the full PureScala language constructs, such as pattern matches.
 
@@ -931,6 +947,8 @@ def compiled(ctx: Map[String, Int]): Int = {
   interpret(program, ctx) // ==> 10 * (ctx("x") + 2)
 }
 \end{Code}
+
+\subsubsection*{Nondeterministic Symbolic Evaluator}
 
 %------------------------------------------------------------------------
 
@@ -1666,7 +1684,7 @@ def foo(x: Linear[Option[BigInt]]): BigInt = {
 } ensuring { _ > 0 }
 \end{Code}
 
-Fortunately for us, because a function's contract will be statically verified by Stainless, there is no point to check it at runtime. Hence, in Stainless' library, both the \stt{require} function and the \stt{ensuring} method discard their body. For this reason, we can safely ignore linearity constraints in a function's contract.\\
+Fortunately for us, because a function's contract will be statically verified by Stainless, there is no point to check it at runtime. Hence, in Stainless's library, both the \stt{require} function and the \stt{ensuring} method discard their body. For this reason, we can safely ignore linearity constraints in a function's contract.\\
 
 \subsubsection*{Linear Data Types}
 
