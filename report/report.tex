@@ -821,15 +821,15 @@ We subsequently denote the path condition by $\Delta$, a formula $e$ that is sat
 \end{figure}
 \end{landscape}
 
-\subsection{Termination}
-
-We argue that, when ran over a program that Stainless deems terminating, the symbolic evaluator whose semantics are given in \RefFig{fig:symbolicsem} terminates as well. We will first note that, for a recursive function expressed in PureScala to be  terminating, the recursive calls must be guarded by a conditional expression, as it would otherwise call itself repeatedly without end. Because we only ever unfold a recursive function  (Wrong, find counter example)
-
 \subsection{Implementation}
 
-We have implemented the symbolic evaluator described above as a new, optional, simplification pass within Inox's existing simplification pipeline. This pass can be enabled by specifying the \texttt{---sym-eval} flag on the command-line, or by setting to corresponding option using the Inox API. The code can be found on GitHub\footnote{\url{https://github.com/romac/inox/tree/sym-eval}}.
+We have implemented\footnote{\url{https://github.com/romac/inox/tree/sym-eval}} the symbolic evaluator described above as a new, optional, simplification pass within Inox's existing simplification pipeline. This pass can be enabled by specifying the \texttt{---sym-eval} flag on the command-line, or by setting to corresponding option using the Inox API.
 
-\subsection{Case Study: Key-value store}
+\subsubsection{Path Condition Satisfiability}
+
+Our initial implementation 
+
+\subsection{Case Study: Key-value Store Algebra}
 \label{symcases}
 
 \RefCode{lst:symkvstore} shows the implementation of a domain-specific language to manipulate a key-value store, along with a tracing interpreter over a Scala \stt{Map}. An simple program which makes use of this DSL to insert a list of concrete values into the store is shown in \RefCode{lst:symkvstoreinv}.
@@ -905,16 +905,56 @@ def interpret(op: Op)(kv: Map[String, String], trace: List[Label]) = op match {
 }
 \end{Code}
 
+
+\subsection{Termination}
+
+\subsubsection*{Evaluation of Non-Terminating Programs}
+
+While the current implementation will not attempt to unfold an "obviously" non-terminating function such as \stt{def f(x: A): A = f(x)}, it is still fairly easy to bypass the current heuristics. For example, when evaluating \stt{g(List(1))} the evaluator will not realise that, even though it is able to reduce the conditional expression to its "else" branch, doing so does not decrease the size of the argument of the recursive call, and will thus never terminate.
+
+\begin{Code}{PureScala}{lst:nontermloop}{Non-Terminating program sending the evaluator into a loop}
+def bar(xs: List[BigInt]): List[BigInt] = {
+  if (xs.isEmpty) Nil() else bar(Cons(xs.head, xs))
+}
+
+def test = {
+  bar(List(1)) == Nil()
+} holds
+\end{Code}
+
+Because Stainless already comes with a powerful termination checker, we believe that it make little sense to re-implement one within Inox. Instead, we simply suggest to only enable the symbolic evaluator on functions which have been proved terminating by Stainless, and enabling debug information with the \stt{--debug=sym-eval} flag in order to hopefully catch any the evaluator being stuck in an infinite loop.\\
+
+Because of this, we strongly suggest not enabling the evaluator when checking for termination in Stainless, because we. In the future, we plan on yielding an error or a warning when both flags are combined.\\
+
+A possible workaround for this problem would be to add a step counter to the evaluator, and stop the evaluation after a certain number of steps have been made. Alternatively, we could stop evaluation after a given laps of time has elapsed, much like the solver underlying Inox is constrained to do. For lack of time, we have currently not implemented either solution.
+
+\subsubsection*{Evaluation of Terminating Programs}
+
+It unfortunately appears that, when it is currently possible for the evaluator to go into an infinite loop while evaluating a program that Stainless deems to be terminating. \RefCode{lst:infloop} shows such a program. We suspect that functions preconditions are currently not being taken into account during the evaluation, because the latter relies on a fresh solver instance which has not been fed the corresponding assertions. It is not exactly clear to us how to solve this problem, although we suspect that either reusing the same solver instance that Inox has been initialized with or lifting the symbolic evaluator at Stainless's level rather than Inox (see \RefSec{sym-further}) could fix this.
+
+\begin{Code}{PureScala}{lst:infloop}{Provably terminating program sending the evaluator into a loop}
+def foo(a: Boolean, n: BigInt): Boolean = {
+  require(n != 0)
+
+  if (n == 0)
+    foo(a, 0) // this branch should never be evaluated
+  else
+    a
+}
+
+def test = {
+  foo(true, 0) == true
+} holds
+\end{Code}
+
+%We argue that, when ran over a program that Stainless deems terminating, the symbolic evaluator whose semantics are given in \RefFig{fig:symbolicsem} terminates as well. We note that, in the PureScala subset that Inox understands, the only source of non-termination is a call to a recursive function. A necessary condition for such a function to be terminating is that the recursive call must guarded by a conditional expression. Because we only unfold a recursive call when we are able to show that doing so would allow 
+
 \subsection{Conclusion}
 
 \TODO{Conclusion}
 
 \subsection{Further Work}
-
-
-\subsubsection*{Path Condition Satisfiability Improvements}
-
-\TODO{PC SMT}
+\label{sym-further}
 
 \subsubsection*{Symbolic Evaluation of PureScala Programs in Stainless}
 
@@ -924,7 +964,10 @@ This technique of partially evaluating an interpreter over a known program is kn
 
 To enable such a use case, we propose adding a new annotation \stt{@symeval} to Stainless's standard library, which when present, would instruct Stainless to symbolically evaluate the annotated function, and substitute the resulting expression for the function's original body, while also printing or dumping the full PureScala program resulting from this transformation. This would enable users to use Stainless as a symbolic evaluator for PureScala program.\\
 
-We show below a simple example involving an interpreter for arithmetic expressions, as well as the result yielded by a preliminary experiment, which just hooks into the Inox pipeline and prints the result of the symbolic evaluation of any expression. More work is needed to properly integrate this feature within Stainless, which mainly consists of extending the symbolic evaluator with support for the full PureScala language constructs, such as pattern matches.
+\RefCode{lst:symevalex} features an example involving an interpreter for arithmetic expressions, as well as the result yielded by a preliminary experiment, which just hooks into the Inox pipeline and prints the result of the symbolic evaluation of any expression. More work is needed to properly integrate this feature within Stainless, which mainly consists of extending the symbolic evaluator with support for the full PureScala language constructs, such as pattern matches.\\
+
+We thus believe that lifting the evaluator at the Stainless level might enable interesting use cases such as the one above, while also potentially allow us to fix the termination issues we described in \RefSec{sym-term}. This because we would then be able to check whether a function's precondition holds before unfolding its definition, something that does not currently seem possible when working within Inox.
+
 
 \begin{Code}{PureScala}{lst:symevalex}{Application of the 1st Futamura projection to a simple interpreter and program}
 sealed trait Expr
@@ -950,6 +993,18 @@ def compiled(ctx: Map[String, Int]): Int = {
 
 \subsubsection*{Nondeterministic Symbolic Evaluator}
 
+The evaluator described in this chapter is \textit{deterministic}, in the sense that its evaluation function maps one expression to exactly one expression in a deterministic way. We believe that it could be worthwhile to investigate the the potential use cases of a so-called \textit{non-deterministic}\footnote{Here meant in the same sense that the lazy list monad is often use to model non-determinism.} symbolic evaluator. That is to say, a symbolic evaluator which, when given a single expression, would returns potentially multiple results. For example, when the evaluator would be applied to an expression \stt{$s$ = if ($c$) $t$ else $e$} whose condition $c$ it is not able to evaluate to a boolean literal, it would return all the possible expressions resulting from first evaluating the condition and both branches nondeterministically. In pseudo-code:
+
+\begin{ShortCode}{PureScala}
+def ndEval(expr: Expr, pc: PC): Stream[Expr] = { /* ... */ }
+
+ndEval(IfExpr(c, t, e), pc) == for {
+  cs <- eval(c, pc)
+  ts = eval(t, pc withCond c)
+  es = eval(e, pc withCond not(c))
+} yield ts ++ es
+\end{ShortCode}
+
 %------------------------------------------------------------------------
 
 \clearpage
@@ -958,25 +1013,19 @@ def compiled(ctx: Map[String, Int]): Int = {
 
 \subsection{Motivation}
 
-\TODO{Motivation}
+Over the last few decades, many different models of concurrent computation have been discovered, such as \textit{Petri Nets}, \textit{Communicating Sequential Processes} and the \textit{$\pi$-calculus} \cite{algebraicactors}. 
 
-\subsection{The Actor Model}
+Moreover, because actors do not share memory and rely on asynchronous message passing, the Actor Model is well suited to model distributed systems as well.
 
-\subsubsection{Introduction}
-
-\TODO{Actor Model}
-
-\subsubsection{Akka}
-
-\TODO{Akka}
 
 \subsection{A Simple Actor Model for Verification}
 
-\subsubsection{Differences with Akka}
-
-The most notable difference between our model and the one implemented in Akka\footnote{Akka Documentation: Message Delivery Reliability - \url{https://doc.akka.io/docs/akka/current/general/message-delivery-reliability.html} (archive: \url{http://archive.is/XU8if})}, is that we rely on \textit{exactly-once} delivery of messages. We experimented with a weaker model that only relied on \textit{at-most-once} delivery but it quickly became clear that the amount of work needed to verify the very same systems we describe below would be too much in the context of this project.
+\subsubsection{Introduction}
 
 \subsubsection{Implementation}
+\label{actor-impl}
+
+We now below the PureScala implementation of the model 
 
 \subsubsection*{Message}
 
@@ -1037,32 +1086,11 @@ abstract class Behavior {
 }
 \end{ShortCode}
 
-%\subsubsection*{Transition}
-%
-%Whenever a message is processed, we record the transition between the previous 
-%state of the system and the one after the message has been been processed. We keep 
-%track of this information as an instance of the \InlineS{Transition} class, which 
-%holds: the \InlineS{Msg} that has been delivered, its sender and receiver, the new 
-%behavior of the destination actor, and the list of \InlineS{Packet}s the destination 
-%actor wants to send.
-%
-%\begin{ShortCode}{PureScala}
-%case class Transition(
-%  from: ActorRef,
-%  to: ActorRef,
-%  msg: Msg,
-%  newBehavior: Behavior,
-%  toSend: List[Packet]
-%)
-%\end{ShortCode}
-
 \vspace{-15pt}
 \subsubsection*{Actor System}
 
 The state of the Actor system at a given point in time is modelled as a case class, 
 holding the behavior associated with each actor reference, and the list of in-flight messages between any two actors.
-
-% as well as a trace of the execution up to that point, modelled as a list of \InlineS{Transition}s.
 
 \begin{ShortCode}{PureScala}
 case class ActorSystem(
@@ -1080,6 +1108,22 @@ the aforementioned message has been processed.
 \begin{ShortCode}{PureScala}
 def step(from: ActorRef, to: ActorRef): ActorSystem
 \end{ShortCode}
+
+\subsubsection{Comparison with Akka and Akka Typed}
+
+\subsubsection*{Akka}
+
+Akka is a powerful Scala implementation of the Actor model, suitable for both concurrent and distributed systems. 
+
+\subsubsection*{Akka Typed}
+
+\subsubsection*{Notable Differences}
+
+While we initially set to mimic the API offered by the Akka Typed library\footnote{\url{https://doc.akka.io/docs/akka/2.5.4/scala/typed.html}}, we quickly ran into some limitations of Stainless's type system. Namely, the lack of an encoding for both existential types, and various issues with the encoding of co-/contravariant class hierarchies. While some of those issues got fixed over the last few months, we have been unable to provide a typed API similar in spirit to Akka Typed. For lack of time, we have decided to go with the untyped API described in \RefSec{actor-impl}.  \\
+
+Another notable difference between our model and both the one implemented in Akka\footnote{\url{https://doc.akka.io/docs/akka/current/general/message-delivery-reliability.html}}, is that we rely on \textit{exactly-once} delivery of messages. We experimented with a weaker model that only relied on \textit{at-most-once} delivery but it quickly became clear that the amount of work needed to verify the very same systems we describe below would be too much in the context of this project.
+
+% (archive: \url{http://archive.is/XU8if})}
 
 \subsection{Operational Semantics}
 \label{semantics}
@@ -1201,11 +1245,6 @@ def preserveInv(s: ActorSystem, n: ActorRef, m: ActorRef): Boolean = {
 
 When encoutering such a definition, Stainless will generate a verification condition 
 equivalent to \RefFig{fig:stepinvariant}, which will then be discharged to Inox and the underlying SMT solver.
-
-%\subsection{Reasoning About Traces}
-%\label{traces}
-%
-%\TODO{Traces}
 
 \subsection{Case studies}
 \label{casestudies}
@@ -1580,6 +1619,10 @@ def main(args: Array[String]): Unit = {
 \subsubsection*{Name Uniqueness}
 
 It is important to note that, within this model, actor references are not guaranteed to be unique as a user could spawn two actors with the same name. \TODO{++}
+
+\subsection{Reasoning About Traces}
+
+\TODO{Traces}
 
 %\clearpage
 %\section{Verification of Conflict-Free Replicated Data Types}
@@ -1977,8 +2020,6 @@ def menu(card: String)(menu: Linear[Menu]): Unit = {
 \TODO{Conclusion}
 
 \subsection{Further Work}
-
-\TODO{Further Work}
 
 \clearpage
 \section{Conclusion}

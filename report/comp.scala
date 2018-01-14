@@ -2,6 +2,7 @@
 import stainless.lang._
 import stainless.collection._
 import stainless.annotation._
+import stainless.util.Random
 
 object comp {
 
@@ -10,9 +11,17 @@ object comp {
   case class Num(value: Int)       extends Expr
   case class Add(l: Expr, r: Expr) extends Expr
   case class Mul(l: Expr, r: Expr) extends Expr
+  case class Rand(max: Expr)       extends Expr
 
   case class Context(bindings: List[(String, Int)]) {
     def apply(name: String): Int = bindings.find(_._1 == name).map(_._2).get
+  }
+
+  implicit val state = Random.newState
+
+  @extern
+  def random(max: Int): Int = {
+    Random.nextInt(max)
   }
 
   def interpret(expr: Expr, ctx: Context): Int = expr match {
@@ -20,9 +29,10 @@ object comp {
     case Var(name)  => ctx(name)
     case Add(l, r)  => interpret(l, ctx) + interpret(r, ctx)
     case Mul(l, r)  => interpret(l, ctx) * interpret(r, ctx)
+    case Rand(max)  => random(interpret(max, ctx))
   }
 
-  val program: Expr = Mul(Num(10), Add(Var("x"), Num(2)))
+  val program: Expr = Mul(Num(10), Add(Var("x"), Rand(Num(42))))
 
   def compiled(x: Int): Int = {
     interpret(program, Context(List("x" -> x)))
