@@ -92,10 +92,12 @@
 \usepackage{chngpage}
 \usepackage{rotating}
 
+% Line spacing
+\linespread{1.1}
+
 % Listings
 \usepackage{listings,multicol}
 \usepackage{lstscala}
-
 
 \lstdefinelanguage{PureScala}{ % Using `Scala` result in a infinite recursion
   style=scala-color,
@@ -234,7 +236,7 @@
 \newcommand{\BigO}[1]{\mathcal{O}(#1)}
 \newcommand{\ActorRef}{\InlineS{ActorRef}\ }
 \newcommand{\stt}[1]{\texttt{\small{#1}}}
-
+%\newcommand{\stt}[1]{\InlineS{#1}}
 
 %%%
 
@@ -908,6 +910,8 @@ def interpret(op: Op)(kv: Map[String, String], trace: List[Label]) = op match {
 
 \subsection{Termination}
 
+We discuss below two issues related to the termination of the symbolic evaluator. Moreover, we strongly suggest not enabling the evaluator when checking for termination in Stainless, as doing could throw prevent the termination checker to itself terminate, as well as yield wrong results.
+
 \subsubsection*{Evaluation of Non-Terminating Programs}
 
 While the current implementation will not attempt to unfold an "obviously" non-terminating function such as \stt{def f(x: A): A = f(x)}, it is still fairly easy to bypass the current heuristics. For example, when evaluating \stt{g(List(1))} the evaluator will not realise that, even though it is able to reduce the conditional expression to its "else" branch, doing so does not decrease the size of the argument of the recursive call, and will thus never terminate.
@@ -922,15 +926,13 @@ def test = {
 } holds
 \end{Code}
 
-Because Stainless already comes with a powerful termination checker, we believe that it make little sense to re-implement one within Inox. Instead, we simply suggest to only enable the symbolic evaluator on functions which have been proved terminating by Stainless, and enabling debug information with the \stt{--debug=sym-eval} flag in order to hopefully catch any the evaluator being stuck in an infinite loop.\\
-
-Because of this, we strongly suggest not enabling the evaluator when checking for termination in Stainless, because we. In the future, we plan on yielding an error or a warning when both flags are combined.\\
+As Stainless already comes with a powerful termination checker, we believe that it make little sense to re-implement one within Inox. Instead, we simply suggest to only enable the symbolic evaluator on functions which have been proved terminating by Stainless, and enabling debug information with the \stt{--debug=sym-eval} flag in order to hopefully catch any the evaluator being stuck in an infinite loop.\\
 
 A possible workaround for this problem would be to add a step counter to the evaluator, and stop the evaluation after a certain number of steps have been made. Alternatively, we could stop evaluation after a given laps of time has elapsed, much like the solver underlying Inox is constrained to do. For lack of time, we have currently not implemented either solution.
 
 \subsubsection*{Evaluation of Terminating Programs}
 
-It unfortunately appears that, when it is currently possible for the evaluator to go into an infinite loop while evaluating a program that Stainless deems to be terminating. \RefCode{lst:infloop} shows such a program. We suspect that functions preconditions are currently not being taken into account during the evaluation, because the latter relies on a fresh solver instance which has not been fed the corresponding assertions. It is not exactly clear to us how to solve this problem, although we suspect that either reusing the same solver instance that Inox has been initialized with or lifting the symbolic evaluator at Stainless's level rather than Inox (see \RefSec{sym-further}) could fix this.
+It unfortunately appears that, when it is currently possible for the evaluator to go into an infinite loop while evaluating a program that Stainless deems to be terminating. \RefCode{lst:infloop} shows such a program. We suspect that functions preconditions are currently not being taken into account during the evaluation, because the latter relies on a fresh solver instance which has not been fed the corresponding assertions. It is not exactly clear to us how to solve this problem, although we suspect that either reusing the same solver instance that Inox has been initialised with or lifting the symbolic evaluator at Stainless's level rather than Inox (see \RefSec{sym-further}) could fix this.
 
 \begin{Code}{PureScala}{lst:infloop}{Provably terminating program sending the evaluator into a loop}
 def foo(a: Boolean, n: BigInt): Boolean = {
@@ -960,14 +962,19 @@ def test = {
 
 The technique of symbolic evaluation is not limited to the simplification of verification conditions that we covered in this chapter. It can indeed also be used on its own over regular programs. For example, one could implement an interpreter for a (domain specific) language $L$ in PureScala, and then write a program $p$ in this language. One could then symbolically execute the interpreter  over this program $p$, keeping the the inputs or even the I/O operations abstract, yielding a PureScala expression. This resulting expression can be seen as a "compiled" version of the original program, represented as a PureScala program, which could then linked to a small runtime and be compiled to a lower-level language using the infrastructure provided by the Scala language itself, PureScala being a strict subset of Scala.\\
 
-This technique of partially evaluating an interpreter over a known program is known as the \textit{1st Futamura projection} \cite{futamura}, and can theoretically be applied to the symbolic evaluator itself, yielding a compiler (the 2nd projection) or even a converter from any interpreter to a compiler (3rd projection).\\
+The technique of partially evaluating an interpreter over a known program is known as the \textit{1st Futamura projection} \cite{futamura}, and can theoretically be applied to the symbolic evaluator itself, yielding a compiler (the 2nd projection) or even a converter from any interpreter to a compiler (3rd projection).\\
 
 To enable such a use case, we propose adding a new annotation \stt{@symeval} to Stainless's standard library, which when present, would instruct Stainless to symbolically evaluate the annotated function, and substitute the resulting expression for the function's original body, while also printing or dumping the full PureScala program resulting from this transformation. This would enable users to use Stainless as a symbolic evaluator for PureScala program.\\
 
 \RefCode{lst:symevalex} features an example involving an interpreter for arithmetic expressions, as well as the result yielded by a preliminary experiment, which just hooks into the Inox pipeline and prints the result of the symbolic evaluation of any expression. More work is needed to properly integrate this feature within Stainless, which mainly consists of extending the symbolic evaluator with support for the full PureScala language constructs, such as pattern matches.\\
 
-We thus believe that lifting the evaluator at the Stainless level might enable interesting use cases such as the one above, while also potentially allow us to fix the termination issues we described in \RefSec{sym-term}. This because we would then be able to check whether a function's precondition holds before unfolding its definition, something that does not currently seem possible when working within Inox.
+We also believe that lifting the evaluator at the Stainless level might  potentially allow us to fix the termination issues we described in \RefSec{sym-term}. This because we would then be able to check whether a function's precondition holds before unfolding its definition, something that is not currently possible when working within Inox, as preconditions are encoded as assertions which are fed to the solver independently.
 
+\subsubsection*{Nondeterministic Symbolic Evaluator}
+
+The evaluator described in this chapter is \textit{deterministic}, in the sense that its evaluation function maps one expression to exactly one expression in a deterministic way. We believe that it could be worthwhile to investigate the the potential use cases of a so-called \textit{non-deterministic}\footnote{Here meant in the same sense that the lazy list monad is often use to model non-determinism.} symbolic evaluator. That is to say, a symbolic evaluator which, when given a single expression, would returns potentially multiple results. For example, when the evaluator would be applied to an expression \stt{$s$ = if ($c$) $t$ else $e$} whose condition $c$ it is not able to evaluate to a boolean literal, it would return all the possible expressions resulting from first evaluating the condition and both branches nondeterministically. We show some pseudo-code in \RefCode{lst:nondet}.\\
+
+One potential use case of such an evaluator that we see, when combined with a way to trigger its application in user-land code, is for implementing a symbolic \textit{partial order reduction} algorithm. In a bit more detail, the evaluator could be used to compute the set of (potentially symbolic) transitions that results from taking a step at a given (potentially symbolic) state.
 
 \begin{Code}{PureScala}{lst:symevalex}{Application of the 1st Futamura projection to a simple interpreter and program}
 sealed trait Expr
@@ -991,19 +998,16 @@ def compiled(ctx: Map[String, Int]): Int = {
 }
 \end{Code}
 
-\subsubsection*{Nondeterministic Symbolic Evaluator}
+\begin{Code}{PureScala}{lst:nondet}{Pseudo-code of a non-deterministc evaluator}
+def ndEval(expr: Expr, pc: PC): Stream[Expr] = {
+ case IfExpr(c, t, e) =>
 
-The evaluator described in this chapter is \textit{deterministic}, in the sense that its evaluation function maps one expression to exactly one expression in a deterministic way. We believe that it could be worthwhile to investigate the the potential use cases of a so-called \textit{non-deterministic}\footnote{Here meant in the same sense that the lazy list monad is often use to model non-determinism.} symbolic evaluator. That is to say, a symbolic evaluator which, when given a single expression, would returns potentially multiple results. For example, when the evaluator would be applied to an expression \stt{$s$ = if ($c$) $t$ else $e$} whose condition $c$ it is not able to evaluate to a boolean literal, it would return all the possible expressions resulting from first evaluating the condition and both branches nondeterministically. In pseudo-code:
-
-\begin{ShortCode}{PureScala}
-def ndEval(expr: Expr, pc: PC): Stream[Expr] = { /* ... */ }
-
-ndEval(IfExpr(c, t, e), pc) == for {
+ndEval(e, pc) == for {
   cs <- eval(c, pc)
   ts = eval(t, pc withCond c)
   es = eval(e, pc withCond not(c))
 } yield ts ++ es
-\end{ShortCode}
+\end{Code}
 
 %------------------------------------------------------------------------
 
@@ -1016,7 +1020,6 @@ ndEval(IfExpr(c, t, e), pc) == for {
 Over the last few decades, many different models of concurrent computation have been discovered, such as \textit{Petri Nets}, \textit{Communicating Sequential Processes} and the \textit{$\pi$-calculus} \cite{algebraicactors}. 
 
 Moreover, because actors do not share memory and rely on asynchronous message passing, the Actor Model is well suited to model distributed systems as well.
-
 
 \subsection{A Simple Actor Model for Verification}
 
@@ -1653,22 +1656,130 @@ It is important to note that, within this model, actor references are not guaran
 \label{biparty}
 
 \subsection{Motivation}
+\label{sess-mot}
 
-\subsubsection{Session Types}
-\TODO{Session Types}
+Most systems made of components exchanging messages between them, such as Actor systems, do so by following a \textit{communication protocol}. A protocol is a set of rules which the components must follow when receiving, processing, and replying to a message. While it is possible to verify that a system correctly implements a given protocol, doing so is usually not trivial and often requires a sizeable amount of work, depending of course on the model one is working with. In the case of the Actor model we developed in \RefSec{actors}, in which messages are \textit{unityped}, verifying that a system followed some kind of protocol often required encoding a small type system within the invariants, for example to ensure that a message sent by an actor was of the right type. Moreover, we also had to check whether an actor would actually send a reply when it was expected of it. While being very interesting properties to verify, we would rather rely on the actual type system to catch these mistakes directly when writing the implementation.
 
-\subsubsection{Value-level Encoding of Sessions}
-\TODO{Value-level Encoding of Sessions}
+As we have unfortunately not found a way to provide even just a typed API for our model, and do not expect to find a solution within the scope of this project, we now turn our attention to simpler, synchronous systems involving only two parties communicating over a \textit{channel} with two endpoints, one for sending messages and one for receiving them. Such a system might be an ATM and a user willing to withdraw money communicating through a screen, or a browser and a web server attempting to initialise a secure connection through a TCP socket. The protocols governing such systems that we are going to study in this chapter are called \textit{biparty communication protocols}. Such protocols have the interesting property that the description of the protocol from the viewpoint of one party is enough to deduce the protocol that must be followed from the viewpoint of the other party. The dialogue between two parties is commonly referred to as a \textit{session}.\\
+
+As a running example for the next sections, we will consider a very simple protocol involving two parties Alice and Bob, and four messages \stt{Greet}, \stt{Hello}, \stt{Bye}, and \stt{Quit}.
+From the viewpoint of Alice, the protocol is informally described as follows: Alice must send Bob either the message \stt{Quit} or \stt{Greet}. In the first case the sessions then ends, otherwise she can expect to receive either the message \stt{Bye}, ending the session, or the message \stt{Hello}, after which the session continues from the start.\\
+
+It is important to note that, for the an implementation of such protocols to be correct, assuming an underlying reliable delivery channel, each party must both send the correct message when it is expected of them, and handle all possible messages that they can expect to receive at some point. A implementation of a party which fails to do so is deemed incorrect in that framework.
+
+\subsection{Session Types}
+
+Session types \cite{Honda:1998:LPT:645392.651876} provide a way to encode such protocols at the type level, thus guiding the programmer during the implementation while also guarding against mistakes such as not handling a certain message type or failing to reply to a message. Their syntax is shown in \RefFig{fig:sess-syntax}.
+
+\begin{figure}
+\begin{align*}
+T\quad::=&\quad 	S
+   \quad|\quad \texttt{Int}
+   \quad|\quad \texttt{Boolean}
+   \quad|\quad \texttt{String}
+   \quad|\quad \ldots \tag*{payload}
+\\
+S\quad::=&\quad 	\,\&\,\{\,l_i: S_i\,\}_{i\in I}			\tag*{branching}\\
+        |&\quad 	\oplus\{\,l_i: S_i\,\}_{i\in I}			\tag*{selection}\\
+		|&\quad 	?T.\, S									\tag*{receive}\\
+		|&\quad 	!T.\, S									\tag*{send}\\
+        |&\quad		\mu_X.\, S								\tag*{recursion}\\
+        |&\quad 	X  										\tag*{variable}\\
+        |&\quad 	\epsilon								\tag*{termination}\\
+\end{align*}
+\vspace{-20pt}
+\caption{Syntax of session types \label{fig:sess-syntax}}
+\end{figure}
+
+We show below the session types $S_A$ and $S_B$ corresponding to the protocol we defined in \RefSec{sess-mot}, from the viewpoint of Alice and Bob, respectively.
+\begin{align*}
+S_A &= \mu\alpha.\,\bigg(!\stt{Greet}.\,\Big(?\stt{Hello}.\,\alpha\ \&\ ?\stt{Bye}.\, \epsilon \Big)\ \oplus\ !\stt{Quit}.\,\epsilon \bigg)\\
+S_B &= \mu\alpha.\,\bigg(?\stt{Greet}.\,\Big(!\stt{Hello}.\,\alpha\ \oplus\ !\stt{Bye}.\, \epsilon \Big)\ \&\ ?\stt{Quit}.\,\epsilon \bigg)\\
+\end{align*}
+\vspace{-30pt}
+
+We draw the reader's attention to the similarity between the two types, and note that the $S_B$ reads the same as $S_A$ if one substitutes $!$ for $?$, $\oplus$ for $\&$, and vice-versa. Each type is in fact the \textit{dual} of the other, a property we formalise in \RefFig{fig:dual}.\\
+
+\begin{figure}
+{\large
+\begin{align*}
+\overline{\overline{S}}\qquad&::=\qquad S\\
+\overline{\&\{\,l_1: S_1, \ldots, l_n: S_n\,\}}\qquad&::=\qquad\oplus\{\,l_1: \overline{S_1}, \ldots, l_n: \overline{S_n}\,\}\\
+\overline{?T.\, S} \qquad&::=\qquad !T.\, \overline{S}\\
+\overline{\mu\alpha.\, S} \qquad&::=\qquad \mu\alpha.\, \overline{S[\overline{\alpha}/\alpha]}\\
+\overline{X} \qquad&::=\qquad X\\
+\overline{\epsilon} \qquad&::=\qquad \epsilon
+\end{align*}
+}%
+\vspace{-20pt}
+\caption{Duality of session types \label{fig:dual}}
+\end{figure}
+
+\subsection{Session Types and Linearity}
+
+Although session types were originally meant to be implemented as a separate syntactic category of types and terms to be added to the $\pi$-calculus, it has been shown that it possible to encode them directly in a calculus or language with both \textit{linear types} and \textit{variants} \cite{Wadler:2012:PS:2364527.2364568, Dardha:2012:STR:2370776.2370794}.\\
+
+While there are many ways to perform such an encoding and provide a collection of combinators to build values of such types while enforcing the associated safety properties, the existing approaches \cite{st_lin_haskell, Jespersen:2015:STR:2808098.2808100} either rely on more expressive type systems than the one provided by Stainless, eg. \textit{substructural type systems} or ones which provide \textit{path families}, \textit{higher-kinded types} and \textit{indexed monads}, or \textit{path-dependent types}. In the next section we look at a solution to this problem which only require minimal and orthogonal modifications to Stainless's type system.
+
+\subsection{Value-Level Sessions Encoding}
+
+The \textit{lchannels} Scala library \cite{lchannels} provides a lightweight, value-level encoding of sessions which does not rely on advanced type system features. This encoding essentially corresponds to the \textit{continuation-passing-style} transformation of session types. In their library, the two endpoints (one for receiving, one for sending) of the communication channel between two parties are represented as values of the two types \stt{In} and \stt{Out}, respectively. These types are parametrised by the type of value that they accept or produce, and provide methods to send or receive such messages. \RefCode{lst:lchannels} shows a subset the API provided by the library.
+
+\begin{Code}{PureScala}{lst:lchannels}{\textit{lchannels} library interface}
+abstract class In[+A] {
+  // Blocks until a message is received through the channel and returns it.
+  def receive(implicit d: Duration): A
+  
+  // Map over the next message received and returns the result.
+  def ?[B](f: A => B)(implicit d: Duration): B = {
+    f(receive)
+  }
+}
+
+abstract class Out[-A] {
+  // Sends a message through the channel.
+  def !(msg: A): Unit
+
+  // Sends a message which will trigger a reply, and returns the
+  // endpoint to receive the reply from.
+  // Expects the provided function to embed the given
+  // output endpoint into the message before returning it.
+  // and returns an endpoint for receiving it.
+  def !![B](h: Out[B] => A): In[B] = {
+    val (in, out) = create[B]()
+    this ! h(out)
+    in
+  }
+  
+  // Sends a message after which another message must be sent as well.
+  def !![B](h: In[B] => A): Out[B]
+
+  // Creates a new channel and return its two endpoints.
+  def create[B](): (In[B], Out[B])
+}
+\end{Code}
+
+\RefCode{lst:lchannels-hello} shows the encoding of the protocol we have been working with so far with this framework.
+
+\begin{Code}{PureScala}{lst:lchannels-hello}{\textit{lchannels} implementation of a simple protocol}
+abstract class AliceBob
+case class Quit()                     extends AliceBob
+case class Greet(cont: Out[Response]) extends AliceBob
+
+abstract class Response
+case class Hello(cont: Out[AliceBob]) extends Response
+case class Bye()                      extends Response\
+\end{Code}
 
 \subsection{Linear Types in Stainless}
 
 \newcommand{\lin}[1]{\stt{Linear[#1]}}
 
-We now discuss our implementation of linear types in Stainless. One thing to note is that because the AST we are working with within Stainless is already typed, there is no need to write a full-fledged type checker. We will hence rather describe a \textit{linearity checker} for PureScala programs.
+In this section, we discuss our implementation of linear types in Stainless, and note that, because the PureScala AST we are working with in Stainless is already typed, there is no need to write a full-fledged type checker. We will hence rather describe a \textit{linearity checker} for PureScala programs.
 
-\subsubsection*{Introducing Linear Types}
+\subsubsection{Introducing Linear Types}
 
-We introduce a way to mark some types as \textit{linear}. To this end, we define a covariant type constructor \stt{Linear}, which simply holds a value of type \stt{A}. This type provides a \stt{!} method to consume the linear term and return the underlying value. This enables the user to call a method of the underlying type in a concise way. As the astute reader might have noticed, this effectively adds weakening to the linear type system, and, as we will see, some care will be needed to handle such conversions properly. For example, if one had a value \stt{foo} of type \stt{Linear[Option[A]]}, one could call the \stt{isEmpty} method on the underlying value by writing \stt{foo!.isEmpty}. While making the consumption of a linear value explicit in this way is good for reasoning about one's code, there is still a bit of clutter associated with it, we also introduce an opt-in implicit conversion \stt{delinearize} from any \stt{Linear[A]} to \stt{A}. At last, because converting a non-linear value of type \stt{A} to a linear value of type \stt{Linear[A]} is always safe, we provide a such an implicit conversion by default, \stt{linearize}. \RefCode{lst:lineardef} shows the full definitions. Because those will be extracted in a specific way, they are marked \stt{@ignore}.
+First of all, we need a way to introduce to mark some types as \textit{linear}. To this end, we define a covariant type constructor \stt{Linear}, which simply holds a value of type \stt{A}. This type provides a \stt{!} method to consume the linear term and return the underlying value. This enables the user to call a method of the underlying type in a concise way. As the astute reader might have noticed, this effectively adds weakening to the linear type system, and, as we will see, some care will be needed to handle such conversions properly. For example, if one had a value \stt{foo} of type \stt{Linear[Option[A]]}, one could call the \stt{isEmpty} method on the underlying value by writing \stt{foo!.isEmpty}. While making the consumption of a linear value explicit in this way is good for reasoning about one's code, there is still a bit of clutter associated with it, we also introduce an opt-in implicit conversion \stt{delinearize} from any \stt{Linear[A]} to \stt{A}. At last, because converting a non-linear value of type \stt{A} to a linear value of type \stt{Linear[A]} is always safe, we provide a such an implicit conversion by default, \stt{linearize}. \RefCode{lst:lineardef} shows the full definitions. Because those will be extracted in a specific way, they are marked \stt{@ignore}.
 
 \begin{Code}{PureScala}{lst:lineardef}{Linear wrapper for Scala types and values}
 package stainless
@@ -1693,7 +1804,7 @@ package object linear {
 }
 \end{Code}
 
-\subsubsection*{Preventing Weakening}
+\subsubsection{Preventing Weakening}
 
 We now describe what it means for a linear term to be \textit{consumed}: a term \stt{t} of type \stt{Linear[A]}, for any type \stt{A}, is deemed \stt{consumed} in an expression $e$ when any of the following propositions is true:
 
@@ -1712,11 +1823,11 @@ We now must ensure that no linear term is \textit{consumed} more than once. To t
 
 The astute reader will have noticed that the presence of the \stt{!}\,operator, if not handled carefully, would actually allow weakening. For example, given a value \stt{a:\,Linear[A]}, one could write \stt{val b:\, A = a.!}, and thus obtain a non-linear reference to the underlying value. To counter this, the linearity checker treats any expression of the form \stt{$e$.!}, with \stt{$e$:\,Linear[A]}, as having type \stt{Linear[A]} instead of \stt{A}.
 
-\subsubsection*{Preventing Contraction}
+\subsubsection{Preventing Contraction}
 
 Because linear logic does not allow contraction, we must also ensure that no linear term is \textit{dropped}, that is to say, that it is \textit{consumed} at least once. To this end, we first collect all linear variables being introduced in a function definition, for example as a parameter to the function, in a variable binding, or within a pattern in a \texttt{clause} (even as a wildcard). Then, after having ran the type-checking algorithm described in the previous section, we can make use of the resulting \textit{usage context} $\Delta$ to check whether each and every of those variable has indeed been \textit{consumed} at some point, and reject the program otherwise.
 
-\subsubsection*{Linear Terms in Contracts}
+\subsubsection{Linear Terms in Contracts}
 
 It is important to note that, when running the linearity checker over a function with pre- and/or post-conditions, these are ignored for the following reason: a user might want to constrain either a linear parameter of some function, or its return value. If we ran the linearity checker on such contracts, then one would not be able to re-use the linear variable that is being constrained in the precondition, or would not be able to reference any linear parameter in the postcondition. \RefCode{lst:prepostlinear} shows such a use-case.
 
@@ -1729,7 +1840,7 @@ def foo(x: Linear[Option[BigInt]]): BigInt = {
 
 Fortunately for us, because a function's contract will be statically verified by Stainless, there is no point to check it at runtime. Hence, in Stainless's library, both the \stt{require} function and the \stt{ensuring} method discard their body. For this reason, we can safely ignore linearity constraints in a function's contract.\\
 
-\subsubsection*{Linear Data Types}
+\subsubsection{Linear Data Types}
 
 Because data types can contain linear fields, one must be careful as to when to allow values of such types to be introduced. Indeed, if one were to define a data type \stt{case class A(x:\,Linear[B])}, one should not be allowed to construct a non-linear term of type \stt{A}. That is because doing so would permit the user to have more than one (indirect) reference to the linear \stt{x} field, which is forbidden because of the No-Weakening rule. We must thus ensure that values such types are only introduced linearly, ie. as values of type \stt{Linear[A]}, whether it is as a function parameter, as a variable binding, or as field of another data type. \RefCode{lst:linearadt} features a few examples of this rule in action.
 
@@ -1766,7 +1877,7 @@ def k(x: BigInt): Linear[BigInt] = c match {
 }
 \end{Code}
 
-\subsubsection*{Marking the Current Object as Linear}
+\subsubsection{Marking the Current Object as Linear}
 
 Another issue arise when dealing with data types meant to be introduced linearly if these have associated methods. To understand why, let's look at an example. \RefCode{lst:linfile} shows a very simple API which allows to open a file, read its content line-by-line, or read all its content at once. We would like to make sure that, once a user opens a \stt{File} and receives the associated \stt{FileHandler}, the latter must be closed. Unfortunately, when implementing the \stt{contents} method, nothing prevents the programmer to call \stt{readLine} twice on the current object. That is because, Within \stt{contents}, \stt{this} has type \stt{FileHandler}, and calling any method on it will thus not consume it. As it is not possible in Scala to constrain the type of the current object, even with self-annotations, we introduce a method annotation \stt{@linear} which signals to the linearity checker that, within an annotated method of a class \stt{C}, \stt{this} should be considered to have type \stt{Linear[C]}. As methods inherit the annotations of their enclosing class, it is here enough to annotate the \stt{FileHandler} class with \stt{@linear}.
 
@@ -1794,7 +1905,7 @@ class FileHandler {
 }
 \end{Code}
 
-\subsubsection*{Higher-Order Linear Functions}
+\subsubsection{Higher-Order Linear Functions}
 
 \TODO{Discuss syntax for linear lambdas}
 
@@ -1838,7 +1949,7 @@ class FileHandler {
 \subsection{Sessions Library in PureScala}
 \label{sessions_lib}
 
-\RefCode{lst:sessions} shows the PureScala implementation of the \textit{lchannels} library. For the purpose of verification, we do not need a full-fledged implementation, but only declarations mirroring the Scala library. This way, one could run their implementation with the original library by simply linking against both it and the Stainless library, without our implementation.
+\RefCode{lst:sessions} shows a PureScala implementation of the \textit{lchannels} library. For the purpose of verification, we do not need a full-fledged implementation of the channels, but only declarations mirroring the Scala library. This way, one could run their implementation with the original library by simply linking against both it and the Stainless library, without relying on our library.
 
 \begin{Code}{PureScala}{lst:sessions}{Sessions library in PureScala}
 type In[A]  = Linear[InChan[A]]
@@ -1885,22 +1996,57 @@ class OutChan[A] {
 
 \subsubsection{ATM Protocol}
 
-Let's consider a protocol involving an ATM and its user.
+Let's consider a protocol involving an ATM and its user, which we informally describe below:
 
-\begin{enumerate}
+\begin{enumerate}[label=\Alph*]
 \item The user authenticates herself by sending the ATM both her card number and PIN.
 \item If the authentication succeeds, the ATM displays a menu to the user, who can then choose to:
 \begin{enumerate}
 \item Abort the process altogether.
 \item Ask for her account's balance, in which case the server will reply with the balance, and displays the menu again.
+\end{enumerate}
 \item If the authentication fails, the ATM notifies the user of the failure, and the process is aborted.
 \end{enumerate}
+
+\RefCode{lst:atm_desc} shows the encoding of such a specification using the library described in \RefSec{sessions_lib}. \RefCode{lst:atm_impl} shows the corresponding valid implementation. At last, \RefCode{lst:atmmistake} shows an incorrect implementation of the protocol that would still verify without the linearity checker. We discuss the three use cases below:
+
+\begin{enumerate}
+\item If we provide an empty body for the \stt{atm} function, we would then be greeted with the following error:
+
+\begin{ShortCode}{PureScala}
+$\texttt{\textbf{\textcolor{Red}{Error}}}$: linear variable `c` of type `Linear[In[Authenticate]]` is never used:
+                 def atm(c: Linear[In[Authenticate]]): Unit = {
+                         $\texttt{\textbf{\textcolor{Red}{\textasciicircum\textasciicircum\textasciicircum\textasciicircum\textasciicircum\textasciicircum\textasciicircum\textasciicircum\textasciicircum\textasciicircum\textasciicircum\textasciicircum\textasciicircum\textasciicircum\textasciicircum\textasciicircum\textasciicircum\textasciicircum\textasciicircum\textasciicircum\textasciicircum\textasciicircum\textasciicircum\textasciicircum\textasciicircum\textasciicircum\textasciicircum}}}$
+\end{ShortCode}
+
+Re-using the same channel twice would also give rise to an error:
+
+\begin{ShortCode}{PureScala}
+$\texttt{\textbf{\textcolor{Red}{Error}}}$: linear term `cont` has already been used: doSomething(cont)
+                               $\texttt{\textbf{\textcolor{Red}{\textasciicircum\textasciicircum\textasciicircum\textasciicircum}}}$
+$\texttt{\textbf{\textcolor{Blue}{Info}}}$: term used here: cont !! Balance(balance(card))(_) ? menu(card)
+                                                            $\texttt{\textbf{\textcolor{Red}{\textasciicircum\textasciicircum\textasciicircum\textasciicircum}}}$
+\end{ShortCode}
+
+\item In case we forget to send back a failure notification when the authentication fails. The linearity checker will realise that the linear \stt{cont} is not consumed in every branch of the pattern match, and will pinpoint its introduction:
+
+\begin{ShortCode}{PureScala}
+$\texttt{\textbf{\textcolor{Red}{Error}}}$: linear variable `cont` of $\texttt{type}$ `Linear[OutChan[Response]]` is never used:
+                 case Authenticate(_, _, cont) =>
+                                         $\texttt{\textbf{\textcolor{Red}{\textasciicircum\textasciicircum\textasciicircum\textasciicircum}}}$
+\end{ShortCode}
+
+\item
+At last, let's see what happens if we do not handle the reply to the \stt{Success} message sent in case the authentication succeeds. Because the expression \stt{cont !! Success(\_)} has type \stt{In[Menu]}, one could expect the Scala compiler to raise a type error, as the \stt{atm} function has return type \stt{Unit}. Unfortunately, the Scala compiler will happily convert any value to \stt{Unit} if it occurs at the end of a block. But because \stt{In[Menu]} is a linear type, the linearity checker will notice that the corresponding value is being discarded, and will raise an error:
+
+\begin{ShortCode}{PureScala}
+$\texttt{\textbf{\textcolor{Red}{Error}}}$: linear term cannot be discarded: cont !! Success(_)
+                                        $\texttt{\textbf{\textcolor{Red}{\textasciicircum\textasciicircum\textasciicircum\textasciicircum\textasciicircum\textasciicircum\textasciicircum\textasciicircum\textasciicircum\textasciicircum\textasciicircum\textasciicircum\textasciicircum\textasciicircum\textasciicircum\textasciicircum\textasciicircum\textasciicircum}}}$
+\end{ShortCode}
 \end{enumerate}
 
-\RefCode{lst:atm_desc} shows the encoding of such a specification using the library described in \RefSec{sessions_lib}. \RefCode{lst:atm_impl} shows the corresponding valid implementation. At last, \RefCode{lst:atmmistake} shows an invalid implementation of the protocol that would still verify without the linearity checker. The three mistakes are discussed below.
-
 \begin{Code}{PureScala}{lst:atm_desc}{ATM protocol description}
-//Authentication request from the user
+// Authentication request from the user
 case class Authenticate(card: String, pin: String, cont: Out[Response])
 
 // Authentication response from the ATM
@@ -1914,11 +2060,13 @@ case class CheckBalance(cont: Out[Balance]) extends Menu
 case class Quit()                           extends Menu
 
 // User account balance
-case class Balance(amount: BigInt)(cont: Out[Menu])
+case class Balance(amount: BigInt)(cont: Out[Menu]) {
+  require(amount >= 0)
+}
 \end{Code}
 
-\begin{Code}{PureScala}{lst:atm_impl}{ATM protocol implemenation}
-def atm(c: In[Authenticate]) = {
+\begin{Code}{PureScala}{lst:atm_impl}{Correct ATM protocol implementation}
+def atm(c: In[Authenticate]): Unit = {
   c ? { auth => auth! match {  
     case Authenticate(card, pin, cont) if authenticated(card, pin) =>
       cont !! Success(_) ? menu(card)
@@ -1937,55 +2085,31 @@ def menu(card: String)(menu: Linear[Menu]) = {
   }
 }
 
-@extern
 def authenticated(card: String, pin: String): Boolean = {
   /* ... */
 }
 
-@extern
 def balance(card: String): BigInt = {
   /* ... */
-}
+} ensuring { _ >= 0 }
 \end{Code}
 
-\begin{enumerate}
-\item
-If we make a terrible mistake while implemented the \stt{atm} function by not doing anything with its linear parameter \stt{c}, eg. just left its body empty, we would be greeted with the following error:
+\begin{Code}{PureScala}{lst:atm_user}{Correct user protocol implementation}
+def getAmount(c: Out[Authenticate], card: String, pin: String): Option[BigInt] = {
+  c !! Authenticate(card, pin, _) ? { res =>
+    res! match {
+      case Failure() => None()
+      case Success(cont) => cont !! CheckBalance(_) ? {
+        case Balance(amount)(cont) =>
+          cont ! Quit()
+          Some(amount)
+      }
+    }
+  }
+} ensuring { _ >= 0 }
+\end{Code}
 
-\begin{ShortCode}{PureScala}
-$\texttt{\textbf{\textcolor{Red}{Error}}}$: linear variable `c` of type `Linear[In[Authenticate]]` is never used:
-                 def atm(c: Linear[In[Authenticate]]): Unit = {
-                         $\texttt{\textbf{\textcolor{Red}{\textasciicircum\textasciicircum\textasciicircum\textasciicircum\textasciicircum\textasciicircum\textasciicircum\textasciicircum\textasciicircum\textasciicircum\textasciicircum\textasciicircum\textasciicircum\textasciicircum\textasciicircum\textasciicircum\textasciicircum\textasciicircum\textasciicircum\textasciicircum\textasciicircum\textasciicircum\textasciicircum\textasciicircum\textasciicircum\textasciicircum\textasciicircum}}}$
-\end{ShortCode}
-
-Re-using the same channel twice would also give rise to an error:
-
-\begin{ShortCode}{PureScala}
-$\texttt{\textbf{\textcolor{Red}{Error}}}$: linear term `cont` has already been used: doSomething(cont)
-                               $\texttt{\textbf{\textcolor{Red}{\textasciicircum\textasciicircum\textasciicircum\textasciicircum}}}$
-$\texttt{\textbf{\textcolor{Blue}{Info}}}$: term used here: cont !! Balance(balance(card))(_) ? menu(card)
-                                                            $\texttt{\textbf{\textcolor{Red}{\textasciicircum\textasciicircum\textasciicircum\textasciicircum}}}$
-\end{ShortCode}
-
-\item
-In case we forget to send back a failure notification when the authentication fails. The linearity checker will realize that the linear \stt{cont} is not consumed in every branch of the pattern match, and will pinpoint its introduction:
-
-\begin{ShortCode}{PureScala}
-$\texttt{\textbf{\textcolor{Red}{Error}}}$: linear variable `cont` of $\texttt{type}$ `Linear[OutChan[Response]]` is never used:
-                 case Authenticate(_, _, cont) =>
-                                         $\texttt{\textbf{\textcolor{Red}{\textasciicircum\textasciicircum\textasciicircum\textasciicircum}}}$
-\end{ShortCode}
-
-\item
-At last, let's see what happens if we do not handle the reply to the \stt{Success} message sent in case the authentication succeeds. Because the expression \stt{cont !! Success(\_)} has type \stt{In[Menu]}, one could expect the Scala compiler to raise a type error, as the \stt{atm} function has return type \stt{Unit}. Unfortunately, the Scala compiler will happily convert any value to \stt{Unit} if it occurs at the end of a block. But because \stt{In[Menu]} is a linear type, the linearity checker will notice that the corresponding value is being discarded, and will raise an error:
-
-\begin{ShortCode}{PureScala}
-$\texttt{\textbf{\textcolor{Red}{Error}}}$: linear term cannot be discarded: cont !! Success(_)
-                                        $\texttt{\textbf{\textcolor{Red}{\textasciicircum\textasciicircum\textasciicircum\textasciicircum\textasciicircum\textasciicircum\textasciicircum\textasciicircum\textasciicircum\textasciicircum\textasciicircum\textasciicircum\textasciicircum\textasciicircum\textasciicircum\textasciicircum\textasciicircum\textasciicircum}}}$
-\end{ShortCode}
-\end{enumerate}
-
-\begin{Code}{PureScala}{lst:atmmistake}{Wrong implementation of the ATM protocol}
+\begin{Code}{PureScala}{lst:atmmistake}{Incorrect implementation of the ATM protocol}
 def atm(c: In[Authenticate]): Unit = {
   c ? { auth => auth! match {  
     case Authenticate(card, pin, cont) if authenticated(card, pin) =>
@@ -2015,11 +2139,21 @@ def menu(card: String)(menu: Linear[Menu]): Unit = {
 
 \TODO{TLS 1.2 Handshake}
 
+\footnote{The Transport Layer Security (TLS) Protocol - Version 1.2: \url{https://www.ietf.org/rfc/rfc5246.txt}}
+
 \subsection{Conclusion}
 
 \TODO{Conclusion}
 
 \subsection{Further Work}
+
+\subsubsection*{Multiparty Session Types for Actor Systems}
+
+\cite{DBLP:journals/corr/NeykovaY16}
+
+\subsubsection*{Affine Types and Borrow Checking}
+
+After implementing a very basic borrow checker with static lifetimes within Stainless, \TODO{etc...}
 
 \clearpage
 \section{Conclusion}
@@ -2031,7 +2165,7 @@ def menu(card: String)(menu: Linear[Menu]): Unit = {
 
 \clearpage
 
-\nocite{*}
+%\nocite{*}
 \bibliographystyle{ieeetr}
 \bibliography{report}
 
