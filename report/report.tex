@@ -491,22 +491,14 @@ Let's first get a couple of definitions out of the way:
 \begin{itemize}
 \item \textit{Partial evaluation} is the process of executing a program in the presence of partial inputs.
 \item \textit{Symbolic evaluation} is the process of gathering knowledge about symbolic values in a program by executing it.
-\item A \textit{path condition} is a quantifier-free formula in conjunctive normal form which encodes the knowledge we have gathered so far about some symbolic values.
+\item A \textit{path condition} is a quantifier-free formula in conjunctive normal form which encodes the knowledge about the symbolic values encountered so far that the evaluator has gathered along the way.
 \end{itemize}
 
-Combining both techniques into a single evaluation procedure, ie. a procedure which partially evaluates a program with symbolic inputs while maintaining a \textit{path condition}, has been shown to increase both performance and reasoning abilities of verifications systems in some cases \cite{partialsym}. We call such a procedure a \textit{symbolic partial evaluator}.\\
+Combining both techniques into a single evaluation procedure, ie. a procedure which partially evaluates a program with symbolic inputs while maintaining a \textit{path condition}, has been shown to increase both performance and reasoning abilities of verifications systems in some cases \cite{partialsym}. We call such a procedure a \textit{symbolic partial evaluator}. The key benefit of this technique is that, whenever the evaluator encounters a boolean expression while evaluating a program, it can make use of the path condition to hopefully determine whether the expression is \InlineS{true} or \InlineS{false}.\\
 
+\RefCode{lst:PC} shows a simple program annotated with the current path condition at various points of execution. This path condition enables the partial evaluator to reduce the whole expression to the \InlineS{else} branch of the conditional expression  because, under the path condition at step 2, the condition \InlineS{x > 0} is provably \InlineS{false}.
 
-
-When encountering a boolean expression, the evaluator can then make use of the path condition to determine the value of that expression.  both partial and symbolic evaluation at the same time 
-
-For example, when the evaluator encounters an expression $e$ of type \stt{Boolean} under a path condition $p$, 
-
-When encountering a conditional expression $E = \stt{if ($c$) $t$ else $e$}$, under the current path condition, the result of which we will denote by $c'$. If $c'$ is a boolean literal, we then evaluate the appropriate branch, and continue from here. Otherwise, we check whether the  formula $p \implies c'$ is valid. If we are able to show that it is indeed valid, we recurse into the "then" branch of the conditional expression under new path condition $p \wedge c'$. Otherwise, we instead check whether the formula $p \implies \neg\,c'$ is valid, in which case we recurse into its "else" branch under the path condition $p \wedge \neg\,c'$. At last, if we are unable to show that either formula is valid, we evaluate both branches under their respective path conditions, and we denote the results respectively by $t'$ and $e'$. Finally, we return \stt{if ($c'$) $t'$ else $e'$}. \\
-
-\RefCode{lst:PC} shows a simple program annotated with the current path condition at various points of execution. When evaluating such a program symbolically, the path condition enables the evaluator to pick the "else" branch of the "if-then-else" expression, because, under the path condition at step 2, the condition \stt{x > 0} evaluates to \stt{false}.
-
-\begin{Code}{PureScala}{lst:PC}{Example program annotated with path condition}
+\begin{Code}{PureScala}{lst:PC}{Program annotated with path conditions and result of its symbolic partial evaluation}
 // Expression before evaluation:
 {
   // 1. PC = true
@@ -530,9 +522,41 @@ When encountering a conditional expression $E = \stt{if ($c$) $t$ else $e$}$, un
 
 \subsection{Semantics}
 
-We subsequently denote the path condition by $\Delta$, a formula $e$ that is satisfiable under $\Delta$ by $e \in \Delta$. and a variable $v$ that is bound to an expression $e$ under $\Delta$ by $v \mapsto_\Delta e$. We will not delve into the details of how to decide whether a given condition is satisfiable under some path condition, but a reasonable although much too simplistic approximation would be to maintain a set of expressions and simply testing for membership. The actual implementation found in Inox (which predates our work) is much more complex and powerful implementation of this very idea. Moreover, we denote the fact that an expression $e$ evaluates to an expression $e'$ under a path condition $\Delta$ by $\lb{e}{\Delta} \longrightarrow e'$. Given $c, v$ two expressions, and \stt{x} a variable, we note $\Delta \cup c$ the addition of $c$ as a conjunct to the path condition $\Delta$, and $\Delta \uplus x \mapsto v$ the addition of the binding \stt{val x = $v$}. At last, the fact that an expression $e$ can be simplified to a boolean value under a path condition $\Delta$ is captured by $\stt{e} \Downarrow \Delta$. \RefFig{fig:symbolicsem} shows the operation semantics followed by our implementation, expressed in those terms.
+We subsequently denote the path condition by $\Delta$, an boolean expression $e$ that  evaluates to \InlineS{true} under $\Delta$ by $e \in \Delta$. and a variable $v$ that is bound to an expression $e$ under $\Delta$ by $v \mapsto_\Delta e$. We will not delve into the details of how to decide whether a given condition is satisfiable under some path condition, but a reasonable although much too simplistic approximation would be to maintain a set of expressions and simply testing for membership. The actual implementation found in Inox (which predates our work) is much more complex and powerful implementation of this very idea. Moreover, we denote the fact that an expression $e$ evaluates to an expression $e'$ under a path condition $\Delta$ by $\lb{e}{\Delta} \longrightarrow e'$. Given $c, v$ two expressions, and \stt{x} a variable, we note $\Delta \cup c$ the addition of $c$ as a conjunct to the path condition $\Delta$, and $\Delta \uplus x \mapsto v$ the addition of the binding \stt{val x = $v$}. At last, the fact that an expression $e$ can be simplified to a boolean value under a path condition $\Delta$ is captured by $\stt{e} \Downarrow \Delta$. \RefFig{fig:symbolicsem} shows the operation semantics followed by our implementation, expressed in those terms. \\
 
-\TODO{Describe pattern matches, assume, and invoke}
+\subsubsection*{Evaluation of Boolean expressions}
+
+To determine the value of an expression $c$ of type \stt{Boolean}, the evaluator proceeds as follows:
+
+\begin{enumerate}
+\item If $c$ is a boolean literal, the evaluator returns $c$.
+\item Otherwise, it checks whether the  formula $\Delta_{CNF} \implies c$ is valid, where $\Delta_{CNF}$ is the CNF formula corresponding to the path condition $\Delta$:
+\begin{enumerate}
+\item If it is valid, the evaluator returns \InlineS{true}.
+\item Otherwise, it checks whether the formula $\Delta_{CNF} \implies \neg\,c'$ is valid, in which case it returns \InlineS{false}.
+\item If none are valid, the expression goes through the other evaluation rules based on its structure.
+\end{enumerate}
+\end{enumerate}
+
+\subsubsection*{Evaluation of conditional expressions}
+
+When encountering a conditional expression $E = \stt{if ($c$) $t$ else $e$}$, under a path condition $\Delta$, the evaluator proceeds as follows:
+
+\begin{enumerate}
+\item It partially evaluates $c$, resulting in an expression $c'$.
+\item If $c'$ is the boolean literal \InlineS{true}, it recurses into the \stt{then} branch of the conditional expression under the path condition $\Delta \cup c'$.
+\item If $c'$ is the boolean literal \InlineS{false}, it recurses into the 
+\stt{else} branch under the path condition $\Delta \cup \neg\,c'$.
+\item If $c'$ is not a literal, it evaluates both branches under their respective path conditions. We denote the result of their evaluation respectively by $t'$ and $e'$. It then returns the expression \stt{if ($c'$) $t'$ else $e'$}.
+\end{enumerate}
+
+\subsubsection*{Evaluation of pattern matches}
+
+Pattern matches are converted to an equivalent conditional expression with explicit type checks, casts, and field accesses, before being fed back to the evaluator.
+
+\subsubsection*{Evaluation of function invocations}
+
+\TODO{Evaluation of function invocations}
 
 \begin{figure}[htb]
 \begin{framed}
@@ -797,8 +821,6 @@ We subsequently denote the path condition by $\Delta$, a formula $e$ that is sat
 }
 \end{equation}
 
-% TODO: Application(Assume)?
-
 \begin{equation}
 \dfrac{
  \neg\,\stt{f.isRecursive} \quad
@@ -865,12 +887,9 @@ We subsequently denote the path condition by $\Delta$, a formula $e$ that is sat
 
 \subsection{Implementation}
 
-We have implemented the symbolic partial evaluator described above within Stainless\footnote{\url{https://github.com/romac/stainless/tree/stainless-sym}}.
-In order to invoke the partial evaluator on a function definition, a user must supply the new \stt{--partial-eval} flag and annotate the function with the \stt{@partialEval} annotation. Any such function will then be partially evaluated,  and its body will be substituted by resulting expression. Enabling the \stt{partial-eval} debug section instructs Stainless to print the result of the evaluation. This effectively enable users to use Stainless as a symbolic partial evaluator for PureScala program.
+We have implemented the symbolic partial evaluator described above within Stainless\footnote{\url{https://github.com/romac/stainless/tree/sym-partial-eval}} in about 900 lines of code, leveraging Inox to check for the validity of the formulas underlying the path condition.\\
 
-\subsubsection{Path Condition}
-
-Our initial implementation 
+In order to invoke the partial evaluator on a function definition, a user must supply the new \stt{--partial-eval} flag and annotate the function with the \stt{@partialEval} annotation. Any such function will then be partially evaluated, and its body will be substituted by the resulting expression. Enabling the \stt{partial-eval} debug section instructs Stainless to print the result of the evaluation. This effectively enable users to use Stainless as a symbolic partial evaluator for PureScala program.
 
 \subsection{Case Study: Key-value Store Algebra}
 \label{symcases}
@@ -900,7 +919,7 @@ val program = insert(xs) {
   }
 }
 
-@symeval
+@partialEval
 def result(map: Map[String, String], init: List[Label], fuel: BigInt) = {
   require(fuel > 10)
   interpret(program)(map, init, fuel)
@@ -1013,13 +1032,13 @@ def interpret(expr: Expr, ctx: Context): Either[Error, Int] = {
 \begin{Code}{PureScala}{lst:symevalex}{"Compilation" of a simple program}
 val program: Expr = Mul(Num(10), Add(Var("x"), Rand(Num(42))))
 
-@symeval
+@partialEval
 def compiled(ctx: Context): Int = {
   require(ctx contains "x")
   interpret(program, ctx).get.            // 10 * (ctx("x") + random(42))
 }
 
-@symeval
+@partialEval
 def test(y: Int) = {
   val ctx = Context(Map("y" -> Num(y)))
   interpret(program, ctx)                 // Left(Error("Unbound variable: x"))
@@ -1035,29 +1054,47 @@ def bar(xs: List[BigInt]): List[BigInt] = {
   if (xs.isEmpty) Nil() else bar(Cons(xs.head, xs))
 }
 
-@symeval
+@partialEval
 def test = {
   bar(List(1)) == Nil()
 } holds
 \end{Code}
 
-Moreover, we argue that, when ran over a program that Stainless deems terminating, the  evaluator terminates as well. In the PureScala subset that we are working with at this point in the pipeline, the only source of non-termination are calls to recursive functions.
+Moreover, we argue that, when ran over a program that Stainless deems terminating, the  evaluator terminates as well. We note that, at point in the pipeline, the only source of non-termination are calls to recursive functions. As such, because the evaluator will only unfold a function invocation when the precondition is satisfied, and when any of the following two statement is true:
 
-Because the evaluator will only unfold function invocations which satisfy the function's precondition, \\
+\begin{enumerate}[label=(\alph*)]
+\item The unfolded expression does not contain a recursive call
+\item Otherwise, it is possible to determine under the current path condition whether a recursive call will be reached or not
+\end{enumerate}
 
-\begin{Code}{PureScala}{lst:infloop}{Provably terminating program}
-def sum(list: List[Int]): Int = list match {
-  case Nil() => 0
-  case Cons(x, xs) => x + sum(xs)
+The understand why the second property is important, consider the program in  \RefCode{lst:tricky}. If the evaluator only looked at the outermost conditional statement to determine whether the call to \stt{tricky} in \stt{test} could be unfolded in productive way, it would end up in an infinite loop. Indeed, because \stt{n} is greater than 0 under the path condition, the \stt{then} branch of the outermost \InlineS{if} will be selected, and evaluation will continue recursively from there. Because we don't know anything about \stt{xs}, the evaluator will then speculatively evaluate both branches of the match expression, and will thus encounter another recursive call, which it will deem worthy of unfolding because, by the same reasoning,  the outermost \InlineS{if} can be reduced to its \stt{then} branch. On the other hand, property (b) will forbid the evaluator to unfold \stt{tricky} because it is not possible to deduce, under the current path condition, whether or not the recursive call will be reached.
+
+On the other hand, if we supply \stt{tricky} with a partially known list, such as in the function \stt{test2}, \stt{tricky} will still be unfolded until the function is eventually applied to the abstract list \stt{xs}.\\
+
+While this no formal argument, we believe that these conditions are sufficient to ensure the termination of the evaluation of provably terminating programs.
+
+\begin{Code}{PureScala}{lst:tricky}{Tricky program to evaluate without ending up in an infinite loop}
+def tricky(n: Int, xs: List[Int]): Int = {
+  if (n > 0) {
+    xs match {
+      case Nil()       => n
+      case Cons(x, xs) => x + tricky(n, xs)
+    }
+  } else {
+    0
+  }
 }
 
-def bar(a: Boolean, n: BigInt): Boolean = {
+@partialEval
+def test1(n: Int, xs: List[Int]) = {
   require(n > 0)
+  tricky(n, xs) // tricky(n, xs)
+}
 
-  if (n == 0)
-    foo(a, -10)
-  else
-    a
+@partialEval
+def test2(n: Int, xs: List[Int]) = {
+  require(n > 0)
+  tricky(n, Cons(1, Cons(2, Cons(3, xs)))) // 1 + (2 + (3 + trick(n, xs)))
 }
 \end{Code}
 
@@ -1065,7 +1102,12 @@ Regarding termination checking itself, we have ensured that the partial evaluato
 
 \subsection{Conclusion}
 
-\TODO{Conclusion}
+We have presented, formalised and implemented a symbolic partial evaluator for PureScala programs which:
+
+\begin{enumerate}
+\item enhances the verification capability of Stainless by allowing the system to reason about programs at a semantic level closer to those of PureScala, effectively simplifying the verification conditions then generated by the system. This in turn helped us reason about a tracing interpreter for a simple algebra over a key-value store.
+\item effectively turns Stainless into a symbolic partial evaluator for PureScala programs, thanks to user-land annotations which allow users to selectively simplify parts of their programs. This allowed us to turn an interpreter for a simple programming language into a compiler from that language to PureScala.
+\end{enumerate}
 
 \subsection{Further Work}
 \label{sym-further}

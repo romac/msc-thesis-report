@@ -47,17 +47,33 @@ object term {
     i(true, 0) == true
   } holds
 
-  @symeval
-  def test(a: List[BigInt]) = {
-    require(a.nonEmpty)
-    lemma(a) != None[BigInt]()
-  } holds
-
-  def lemma(a: List[BigInt]): Option[BigInt] = {
-    a match {
-      case Cons(x, xs) => lemma(xs).map(_ + x)
-      case Nil() => Some(0)
+  def trick(n: Int, xs: List[Int]): Int = {
+    if (n > 0) {
+      xs match {
+        case Nil() => n
+        case Cons(x, xs) => x + trick(n, xs)
+      }
+    } else {
+      0
     }
+  }
+
+  @symeval
+  def test1(n: Int, xs: List[Int]) = {
+    require(n > 0)
+    trick(n, xs)
+  }
+
+  @symeval
+  def test2(n: Int, xs: List[Int]) = {
+    require(n > 0)
+    trick(n, List(1, 2, 3))
+  }
+
+  @symeval
+  def test3(n: Int, xs: List[Int]) = {
+    require(n > 0)
+    trick(n, Cons(1, Cons(2, Cons(3, xs))))
   }
 
 }
