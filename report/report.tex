@@ -240,7 +240,7 @@
 
 %%%
 
-\title{Experiments in Program Verification with Stainless}
+\title{Systems Modeling With Stainless}
 
 \date{
 %  {\small Version 0.6}\\
@@ -304,11 +304,13 @@
 \TODO{Describe Stainless/Inox pipeline}
 
 \clearpage
-\section{Symbolic Evaluation of Inox Programs}
+\section{Symbolic Partial Evaluation of PureScala Programs}
 \label{symbolic}
 
 \subsection{Motivation}
 \label{symbolic-motivation}
+
+\TODO{Rewrite}
 
 Consider the following program, which inserts a known list of key-value pairs in a map that is kept abstract:
 
@@ -346,11 +348,17 @@ def test(map: Map[String, Int]): Boolean = {
 }.holds
 \end{ShortCode}
 
-We believe that it is unreasonable to expect users to manually perform such a transformation, especially with large programs. We have hence implemented an automatic transformation as part of the verification pipeline, by extending the current simplification procedure found in Inox.
+We believe that it is unreasonable to expect users to manually perform such a transformation, especially with large programs. In the next section, we propose a fully automatic solution to this problem.
 
-\subsection{Symbolic Evaluation}
+\subsection{Symbolic Evaluation and Partial Evaluation}
 
-The process of executing a program in the presence of abstract inputs is known as \textit{symbolic evaluation}. The idea is to execute the program over symbolic inputs values while maintaining a \textit{path condition}: a quantifier-free formula in conjunctive normal form that represents constraints over the symbolic variables we have encountered so far. The path condition encodes the knowledge we have gathered so far about the symbolic values we are dealing with, as well as the bindings in scope. At each evaluation step, the evaluator can query the path condition $p$ in order to hopefully determine to which of its branches a conditional expression \stt{if ($c$) $t$ else $e$} should be reduced. We start by  symbolically evaluating $c$ under the current path condition, the result of which we will denote by $c'$. If $c'$ is a boolean literal, we then evaluate the appropriate branch, and continue from here. Otherwise, we add $c'$ as a conjunct to the path condition $p$, and check whether the resulting formula $p \wedge c'$ is satisfiable. If we are able to show that it is indeed satisfiable, we evaluate the "then" branch of the conditional expression under new path condition $p \wedge c'$. Otherwise, we instead check whether the formula $p \wedge \neg\,c'$ is satisfiable, and if that is the case we evaluate the "else" branch under the new path condition $p \wedge \neg\,c'$. If we are unable to show that either formula is satisfiable, we evaluate both branches under their respective path condition, the result of which we will denote by $t'$ and $e'$, respectively, and we return $if (c') t' else e;$. \\
+\cite{partialsym} \TODO{Rewrite}
+
+The process of executing a program in the presence of abstract inputs is known as \textit{partial evaluation}. The idea is to execute the program over symbolic inputs values while maintaining a \textit{path condition}: a quantifier-free formula in conjunctive normal form which encodes the knowledge we have gathered so far about the symbolic values we are dealing with, as well as the bindings in scope. When encountering a boolean expression, the evaluator can make use of path condition to determine the value of that expression.
+
+As another example, encountering a conditional expression $E = \stt{if ($c$) $t$ else $e$}$, under the current path condition, the result of which we will denote by $c'$. If $c'$ is a boolean literal, we then evaluate the appropriate branch, and continue from here. Otherwise, we check whether the  formula $p \implies c'$ is valid. If we are able to show that it is indeed valid, we evaluate the "then" branch of the conditional expression under new path condition $p \wedge c'$. Otherwise, we instead check whether the formula $p \wedge \neg\,c'$ is satisfiable, and if that is the case we evaluate the "else" branch under the new path condition $p \wedge \neg\,c'$. If we are unable to show that either formula is satisfiable, we evaluate both branches under their respective path condition, the result of which we will denote by $t'$ and $e'$, respectively, and we return \stt{if ($c'$) $t'$ else $e'$}. \\
+
+\TODO{Reformulate in term of validity of PC => c}
 
 \RefCode{lst:PC} shows a simple program annotated with the current path condition are various points of execution. When evaluating such a program symbolically, the path condition enables the evaluator to pick the "else" branch of the "if-then-else" expression, because, under the path condition at step 2, the condition \stt{x > 0} evaluates to \stt{false}.
 
@@ -402,7 +410,7 @@ def test(map: Map[String, Int]): Boolean = {
 }.holds
 \end{ShortCode}
 
-Let's only focus on the first two lines of the \stt{test} function, and go through the steps followed by the symbolic evaluator when ran on it. 
+Let's only focus on the first two lines of the \stt{test} function, and go through the steps followed by the evaluator when ran on it. 
 
 \begin{ShortCode}{PureScala}
 val xs = List("a" -> 1, "b" -> 2, "c" -> 3, "d" -> 4)
@@ -432,7 +440,7 @@ val res = foldLeft(
 
 \item \stt{foldLeft} is a recursive function, and some care is thus needed in order to not end up unfolding it indefinitely.\\
 
-The idea here is that a recursive function must contain a \textit{guarded} recursive call to be terminating, as it would otherwise call itself recursively indefinitely and thus not terminate (we discuss termination in more detail in \RefSec{termination}). We can thus look at the function's body, and see whether it contains a conditional expression whose condition can be reduced to a boolean literal under the current path condition. If that is not the case, we cannot safely unfold the function and we stop here. Otherwise, we can replace the conditional expression by its appropriate branch, and evaluate the resulting expression under the new path condition induced by the condition. As long as the function is terminating, this process will terminate as we are either going to end up with a branch that does not contain a recursive call, or we will not be able to evaluate the condition to a boolean value and will thus not proceed further.\\
+The idea here is that a recursive function must contain a \textit{guarded} recursive call to be terminating, as it would otherwise call itself recursively indefinitely and thus not terminate (we discuss termination in more detail in \RefSec{termination}). We can thus look at the function's body, and see whether it contains a conditional expression whose condition can be reduced to a boolean literal under the current path condition. If that is not the case, we cannot safely unfold the function and we stop here. Otherwise, we can replace the conditional expression by the appropriate branch, and evaluate the resulting expression under the new path condition induced by the condition. As long as the function is terminating, this process will terminate as we are either going to end up with a branch that does not contain a recursive call, or we will not be able to evaluate the condition to a boolean value and will thus not proceed further.\\
 
 In the case of \stt{foldLeft}, there is indeed such a conditional expression, and under the current path condition, we are able to evaluate \stt{list.isInstanceOf[Nil]} to \stt{false} given that the path condition contains \stt{list = Cons("a" -> 1, ...)}. We can thus unfold it, replace the "if-then-else" expression by its "else" branch, and continue:
 
@@ -660,6 +668,17 @@ We subsequently denote the path condition by $\Delta$, a formula $e$ that is sat
 }
 \end{equation}
 
+\end{framed}
+\vspace{-10pt}
+\caption{Operational semantics of the symbolic partial evaluator \label{fig:symbolicsem}}
+\end{figure}
+
+\begin{figure}[htb]\ContinuedFloat
+\centering
+%\begin{adjustwidth}{-1mm}{-1cm}
+\begin{framed}
+
+
 \begin{equation}
 \dfrac{
   \stt{T$_2$:\,ADTType} \qquad
@@ -699,9 +718,17 @@ We subsequently denote the path condition by $\Delta$, a formula $e$ that is sat
 }
 \end{equation}
 
+\begin{equation}
+\dfrac{
+  \stt{T:\,ADTType}
+}{
+  \lb{\stt{$e$.asInstanceOf[T]}}{\Delta} \longrightarrow \stt{$\lb{e}{\Delta}$.asInstanceOf[T]}
+}
+\end{equation}
+
 \end{framed}
 \vspace{-10pt}
-\caption{Operational semantics of the symbolic evaluator \label{fig:symbolicsem}}
+\caption{Operational semantics of the symbolic partial evaluator \label{fig:symbolicsem}}
 \end{figure}
 
 %------------------------------------------------------------------------
@@ -711,14 +738,6 @@ We subsequently denote the path condition by $\Delta$, a formula $e$ that is sat
 \centering
 %\begin{adjustwidth}{-1mm}{-1cm}
 \begin{framed}
-
-\begin{equation}
-\dfrac{
-  \stt{T:\,ADTType}
-}{
-  \lb{\stt{$e$.asInstanceOf[T]}}{\Delta} \longrightarrow \stt{$\lb{e}{\Delta}$.asInstanceOf[T]}
-}
-\end{equation}
 
 \begin{equation}
 \dfrac{
@@ -764,12 +783,13 @@ We subsequently denote the path condition by $\Delta$, a formula $e$ that is sat
 
 \begin{equation}
 \dfrac{
- \neg\,\stt{isRecursive(id)} \quad
- \stt{id.params} = \langle \stt{x}_1, \ldots, \stt{x}_n \rangle \quad
- \lb{e_i}{\Delta} \longrightarrow e_i',\, i \in \{1 \ldots n\}
+ \neg\,\stt{f.isRecursive} \quad
+ \stt{f.params} = \langle \stt{x}_1, \ldots, \stt{x}_n \rangle \quad
+ \lb{e_i}{\Delta} \longrightarrow e_i',\, i \in \{1 \ldots n\} \quad
+ \lb{\stt{f.pre($e_1',\ldots,e_n'$)}}{\Delta} \longrightarrow \stt{true}
 }{
-  \lb{\stt{id}(e_1,\ldots,e_n)}{\Delta} \longrightarrow
-  \lb{\stt{id.body}[\stt{x}_1/e_1',\ldots,\stt{x}_n/e_n']}{\Delta}
+  \lb{\stt{f}(e_1,\ldots,e_n)}{\Delta} \longrightarrow
+  \lb{\stt{f.body}[\stt{x}_1/e_1',\ldots,\stt{x}_n/e_n']}{\Delta}
 }
 \label{fig:symbolicsem:fi1}
 \end{equation}
@@ -781,6 +801,8 @@ We subsequently denote the path condition by $\Delta$, a formula $e$ that is sat
  \stt{id.params} = \langle \stt{x}_1, \ldots, \stt{x}_n \rangle
  \quad
  \lb{e_i}{\Delta} \longrightarrow e_i',\  i \in \{1 \ldots n\}
+ \quad
+ \lb{\stt{f.pre($e_1',\ldots,e_n'$)}}{\Delta} \longrightarrow \stt{true}
 }{
   \lb{\stt{id}(e_1,\ldots,e_n)}{\Delta} \longrightarrow
   \lb{\stt{id.body}[\stt{x}_1/e_1',\ldots,\stt{x}_n/e_n']}{\Delta}
@@ -819,13 +841,14 @@ We subsequently denote the path condition by $\Delta$, a formula $e$ that is sat
 
 \end{framed}
 \vspace{-10pt}
-\caption{Operational semantics of the symbolic evaluator \label{fig:symbolicsem}}
+\caption{Operational semantics of the symbolic partial evaluator \label{fig:symbolicsem}}
 \end{figure}
 \end{landscape}
 
 \subsection{Implementation}
 
-We have implemented\footnote{\url{https://github.com/romac/inox/tree/sym-eval}} the symbolic evaluator described above as a new, optional, simplification pass within Inox's existing simplification pipeline. This pass can be enabled by specifying the \texttt{---sym-eval} flag on the command-line, or by setting to corresponding option using the Inox API.
+We have implemented the symbolic partial evaluator described above within Stainless\footnote{\url{https://github.com/romac/stainless/tree/stainless-sym}}.
+In order to invoke the partial evaluator on a function definition, a user must supply the new \stt{--partial-eval} flag and annotate the function with the \stt{@partialEval} annotation. Any such function will then be partially evaluated,  and its body will be substituted by resulting expression. Enabling the \stt{partial-eval} debug section instructs Stainless to print the result of the evaluation. This effectively enable users to use Stainless as a symbolic partial evaluator for PureScala program.
 
 \subsubsection{Path Condition Satisfiability}
 
@@ -834,7 +857,17 @@ Our initial implementation
 \subsection{Case Study: Key-value Store Algebra}
 \label{symcases}
 
-\RefCode{lst:symkvstore} shows the implementation of a domain-specific language to manipulate a key-value store, along with a tracing interpreter over a Scala \stt{Map}. An simple program which makes use of this DSL to insert a list of concrete values into the store is shown in \RefCode{lst:symkvstoreinv}.
+\RefCode{lst:symkvstore} shows the implementation of a domain-specific language to manipulate a key-value store, along with a tracing interpreter over a Scala \stt{Map}. An simple program which makes use of this DSL to insert a list of concrete values into the store is shown in \RefCode{lst:symkvstoreinv}. Turning on the partial evaluator allows Stainless to prove the validity of \stt{result}'s postcondition, which gets turned into:
+
+\begin{ShortCode}{PureScala}
+val (res, trace) = (
+  map.updated("foo", "bar").updated("toto", "tata")("foo"),
+  Get("foo") :: Put("toto", "tata") :: Put("foo", "bar") :: init
+)
+
+res == Some("bar") &&
+trace.take(3) == Get("foo") :: Put("toto", "tata") :: Put("foo", "bar") :: Nil()
+\end{ShortCode}
 
 \begin{Code}{PureScala}{lst:symkvstoreinv}{Example program}
 def insert(kvs: List[(String, String)])(after: Op): Op = kvs match {
@@ -849,72 +882,137 @@ val program = insert(xs) {
   }
 }
 
-def lemma(map: Map[String, String], init: List[Label]) = {
-  val (res, trace) = interpret(program)(map, init)
+@symeval
+def result(map: Map[String, String], init: List[Label], n: BigInt) = {
+  require(n > 10)
+  interpret(program)(map, init, n)
+} ensuring { case (res, trace) => prop(res, trace) }
 
+@inline
+def prop(res: Option[String], trace: List[Label]) = {
   res == Some("bar") &&
-  trace.take(3).reverse == List(
-    Label.Put("foo", "bar"),
+  trace.take(3) == List(
+    Label.Get("foo"),
     Label.Put("toto", "tata"),
-    Label.Get("foo")
+    Label.Put("foo", "bar")
   )
-} holds
+}
 \end{Code}
 
-While Inox is unable to prove the verification condition associated with \stt{lemma}'s postcondition, turning on the symbolic evaluator yields the following VC, which it is then able to promptly prove is \texttt{UNSAT}, thus showing the property correct:
-
-\begin{ShortCode}{PureScala}
-val x = (
-  map.updated("foo", "bar").updated("toto", "tata").get("foo"),
-  Get("foo") :: Put("toto", "tata") :: Put("foo", "bar") :: trace
-)
-
-x._1 != Some("bar") || {
-  init.take(0).reverse :+ Put("foo", "bar") :+ Put("toto", "tata") :+ Get("foo")
-  !=
-  Put("foo", "bar") :: Put("toto", "tata") :: Get("foo") :: Nil
-}
-\end{ShortCode}
-
-%\begin{ShortCode}{PureScala}
-%[  Info  ] val x$3: (Option[String], List[Label]) = (map.updated("foo", Some[String]("bar")).updated("toto", Some[String]("tata"))("foo"), Cons[Label](Get("foo"), Cons[Label](Put("toto", "tata"), Cons[Label](Put("foo", "bar"), trace))))
-%[  Info  ] x$3._1 ≠ Some[String]("bar") || reverse[Label](take[Label](x$3._2, 3)) ≠ Cons[Label](Put("foo", "bar"), Cons[Label](Put("toto", "tata"), Cons[Label](Get("foo"), Nil[Label]())))
-%\end{ShortCode}
-
+\begin{landscape}
 \begin{Code}{PureScala}{lst:symkvstore}{Key-value store implementation}
 sealed abstract class Label
 object Label {
-  case class Get(key: String) extends Label
+  case class Get(key: String)                extends Label
   case class Put(key: String, value: String) extends Label
 }
 
 sealed abstract class Op
-case class Pure(value: Option[String]) extends Op
-case class Get(key: String, next: Option[String] => Op) extends Op
+case class Pure(value: Option[String])                     extends Op
+case class Get(key: String, next: Option[String] => Op)    extends Op
 case class Put(key: String, value: String, next: () => Op) extends Op
 
-def get(key: String)(next: Option[String] => Op): Op = Get(key, next)
+def get(key: String)(next: Option[String] => Op): Op    = Get(key, next)
 def put(key: String, value: String)(next: () => Op): Op = Put(key, value, next)
-def pure(value: Option[String]): Op = Pure(value)
+def pure(value: Option[String]): Op                     = Pure(value)
 
-def interpret(op: Op)(kv: Map[String, String], trace: List[Label]) = op match {
-  case Get(key, next) =>
-  	interpret(next(kv.get(key)))(kv, Label.Get(key) :: trace)
-  case Put(key, value, next) =>
-  	interpret(next())(kv.updated(key, value), Label.Put(key, value) :: trace)
-  case Pure(value) =>
-  	(value, trace)
+def interpret(op: Op)(kv: Map[String, String], trace: List[Label], n: BigInt): (Option[String], List[Label]) = {
+  require(n >= 0)
+  decreases(n)
+
+  op match {
+    case Pure(value) =>
+      (value, trace)
+
+    case Get(key, next) if n > 0 =>
+      interpret(next(kv.get(key)))(kv, Label.Get(key) :: trace, n - 1)
+
+    case Put(key, value, next) if n > 0 =>
+      interpret(next())(kv.updated(key, value), Label.Put(key, value) :: trace, n - 1)
+
+    case _ =>
+      (None(), trace)
+  }
+}
+\end{Code}
+\end{landscape}
+
+\subsection{1st Futamura Projection}
+
+If one were to implement an interpreter for a (domain specific) language $L$ in PureScala, and then write a program $p$ in this language, one could then partially evaluate the interpreter applied to the program, while keeping the inputs and I/O operations abstract. The resulting expression could then be seen as a "compiled" version of the original program, represented as a PureScala program, which could then be linked to a small runtime and be compiled to a lower-level language using the infrastructure provided by the Scala language itself, PureScala being a strict subset of Scala.\\
+
+The technique of partially evaluating an interpreter over a known program is known as the \textit{1st Futamura projection} \cite{futamura}, and can theoretically be applied to the partial evaluator itself, yielding a compiler (the 2nd projection) or even a converter from any interpreter to a compiler (3rd projection).\RefCode{lst:symevalex} features an example involving an interpreter for a simple language with variables, arithmetic expressions and an I/O operation.
+
+\begin{Code}{PureScala}{lst:symevalex}{Implementation an interpreter for a simple language}
+sealed trait Expr
+case class Var(name: String)     extends Expr
+case class Num(value: Int)       extends Expr
+case class Add(l: Expr, r: Expr) extends Expr
+case class Mul(l: Expr, r: Expr) extends Expr
+case class Rand(max: Expr)       extends Expr
+
+case class Context(bindings: List[(String, Expr)]) {
+  def contains(name: String): Boolean =
+  	apply(name).isDefined
+
+  def apply(name: String): Option[Expr] =
+    bindings.find(_._1 == name).map(_._2)
+}
+
+implicit val state = Random.newState
+
+@extern
+def random(max: Int): Int = {
+  Random.nextInt(max)
+}
+
+case class Error(msg: String)
+def interpret(expr: Expr, ctx: Context): Either[Error, Int] = {
+  expr match {
+    case Num(value) => Right(value)
+
+    case Var(name)  => ctx(name) match { 
+      case None()      => Left(Error("Unbound variable: " + name))
+      case Some(value) => interpret(value, ctx)
+    }
+
+    case Add(l, r)  => for {
+      le <- interpret(l, ctx)
+      re <- interpret(r, ctx)
+    } yield le + re
+
+    case Mul(l, r)  => for {
+      le <- interpret(l, ctx)
+      re <- interpret(r, ctx)
+    } yield le * re
+
+    case Rand(max) =>
+      interpret(max, ctx).map(random(_))
+  }
 }
 \end{Code}
 
+\begin{Code}{PureScala}{lst:symevalex}{"Compilation" of a simple program}
+val program: Expr = Mul(Num(10), Add(Var("x"), Rand(Num(42))))
 
-\subsection{Termination}
+@symeval
+def compiled(ctx: Context): Int = {
+  require(ctx contains "x")
+  interpret(program, ctx).get.            // 10 * (ctx("x") + random(42))
+}
 
-We discuss below two issues related to the termination of the symbolic evaluator. Moreover, we strongly suggest not enabling the evaluator when checking for termination in Stainless, as doing could throw prevent the termination checker to itself terminate, as well as yield wrong results.
+@symeval
+def test(y: Int) = {
+  val ctx = Context(Map("y" -> Num(y)))
+  interpret(program, ctx)                 // Left(Error("Unbound variable: x"))
+} ensuring { _.isLeft }
+\end{Code}
 
 \subsubsection*{Evaluation of Non-Terminating Programs}
 
-While the current implementation will not attempt to unfold an "obviously" non-terminating function such as \stt{def f(x: A): A = f(x)}, it is still fairly easy to bypass the current heuristics. For example, when evaluating \stt{g(List(1))} the evaluator will not realise that, even though it is able to reduce the conditional expression to its "else" branch, doing so does not decrease the size of the argument of the recursive call, and will thus never terminate.
+As Stainless already comes with a powerful termination checker, we believe that it make little sense to re-implement one within Inox. Instead, we simply suggest to only enable the partial evaluator on functions which have been proved terminating by Stainless. As an additional measure, we have bounded the maximum number of evaluation steps that can be performed. This ensure that, should one still run the evaluator on a non-termination function, Stainless will not hang or crash.\\
+
+Regarding termination checking, we have ensured that the partial evaluator cannot be enabled when checking termination in Stainless, as doing so could prevent the termination checker to itself terminate, or even yield incorrect results.
 
 \begin{Code}{PureScala}{lst:nontermloop}{Non-Terminating program sending the evaluator into a loop}
 def bar(xs: List[BigInt]): List[BigInt] = {
@@ -926,20 +1024,18 @@ def test = {
 } holds
 \end{Code}
 
-As Stainless already comes with a powerful termination checker, we believe that it make little sense to re-implement one within Inox. Instead, we simply suggest to only enable the symbolic evaluator on functions which have been proved terminating by Stainless, and enabling debug information with the \stt{--debug=sym-eval} flag in order to hopefully catch any the evaluator being stuck in an infinite loop.\\
-
-A possible workaround for this problem would be to add a step counter to the evaluator, and stop the evaluation after a certain number of steps have been made. Alternatively, we could stop evaluation after a given laps of time has elapsed, much like the solver underlying Inox is constrained to do. For lack of time, we have currently not implemented either solution.
-
 \subsubsection*{Evaluation of Terminating Programs}
 
-It unfortunately appears that, when it is currently possible for the evaluator to go into an infinite loop while evaluating a program that Stainless deems to be terminating. \RefCode{lst:infloop} shows such a program. We suspect that functions preconditions are currently not being taken into account during the evaluation, because the latter relies on a fresh solver instance which has not been fed the corresponding assertions. It is not exactly clear to us how to solve this problem, although we suspect that either reusing the same solver instance that Inox has been initialised with or lifting the symbolic evaluator at Stainless's level rather than Inox (see \RefSec{sym-further}) could fix this.
+We argue that, when ran over a program that Stainless deems terminating, the  evaluator terminates as well. We note that, in the PureScala subset that we are working with at this point in the pipeline, the only source of non-termination are calls to recursive functions. A necessary condition for such a function to be terminating is that any recursive call must guarded by a conditional expression. Because the evaluator will only unfold function invocations which satisfy the function's precondition, and "productive" recursive calls, ie. 
 
-\begin{Code}{PureScala}{lst:infloop}{Provably terminating program sending the evaluator into a loop}
+%It unfortunately appears that, when it is currently possible for the evaluator to go into an infinite loop while evaluating a program that Stainless deems to be terminating. \RefCode{lst:infloop} shows such a program. We suspect that functions preconditions are currently not being taken into account during the evaluation, because the latter relies on a fresh solver instance which has not been fed the corresponding assertions. It is not exactly clear to us how to solve this problem, although we suspect that either reusing the same solver instance that Inox has been initialised with or lifting the symbolic evaluator at Stainless's level rather than Inox (see \RefSec{sym-further}) could fix this.
+
+\begin{Code}{PureScala}{lst:infloop}{Provably terminating program}
 def foo(a: Boolean, n: BigInt): Boolean = {
   require(n != 0)
 
   if (n == 0)
-    foo(a, 0) // this branch should never be evaluated
+    foo(a, 0)
   else
     a
 }
@@ -949,8 +1045,6 @@ def test = {
 } holds
 \end{Code}
 
-%We argue that, when ran over a program that Stainless deems terminating, the symbolic evaluator whose semantics are given in \RefFig{fig:symbolicsem} terminates as well. We note that, in the PureScala subset that Inox understands, the only source of non-termination is a call to a recursive function. A necessary condition for such a function to be terminating is that the recursive call must guarded by a conditional expression. Because we only unfold a recursive call when we are able to show that doing so would allow 
-
 \subsection{Conclusion}
 
 \TODO{Conclusion}
@@ -958,45 +1052,11 @@ def test = {
 \subsection{Further Work}
 \label{sym-further}
 
-\subsubsection*{Symbolic Evaluation of PureScala Programs in Stainless}
+\subsubsection*{Nondeterministic Evaluator}
 
-The technique of symbolic evaluation is not limited to the simplification of verification conditions that we covered in this chapter. It can indeed also be used on its own over regular programs. For example, one could implement an interpreter for a (domain specific) language $L$ in PureScala, and then write a program $p$ in this language. One could then symbolically execute the interpreter  over this program $p$, keeping the the inputs or even the I/O operations abstract, yielding a PureScala expression. This resulting expression can be seen as a "compiled" version of the original program, represented as a PureScala program, which could then linked to a small runtime and be compiled to a lower-level language using the infrastructure provided by the Scala language itself, PureScala being a strict subset of Scala.\\
-
-The technique of partially evaluating an interpreter over a known program is known as the \textit{1st Futamura projection} \cite{futamura}, and can theoretically be applied to the symbolic evaluator itself, yielding a compiler (the 2nd projection) or even a converter from any interpreter to a compiler (3rd projection).\\
-
-To enable such a use case, we propose adding a new annotation \stt{@symeval} to Stainless's standard library, which when present, would instruct Stainless to symbolically evaluate the annotated function, and substitute the resulting expression for the function's original body, while also printing or dumping the full PureScala program resulting from this transformation. This would enable users to use Stainless as a symbolic evaluator for PureScala program.\\
-
-\RefCode{lst:symevalex} features an example involving an interpreter for arithmetic expressions, as well as the result yielded by a preliminary experiment, which just hooks into the Inox pipeline and prints the result of the symbolic evaluation of any expression. More work is needed to properly integrate this feature within Stainless, which mainly consists of extending the symbolic evaluator with support for the full PureScala language constructs, such as pattern matches.\\
-
-We also believe that lifting the evaluator at the Stainless level might  potentially allow us to fix the termination issues we described in \RefSec{sym-term}. This because we would then be able to check whether a function's precondition holds before unfolding its definition, something that is not currently possible when working within Inox, as preconditions are encoded as assertions which are fed to the solver independently.
-
-\subsubsection*{Nondeterministic Symbolic Evaluator}
-
-The evaluator described in this chapter is \textit{deterministic}, in the sense that its evaluation function maps one expression to exactly one expression in a deterministic way. We believe that it could be worthwhile to investigate the the potential use cases of a so-called \textit{non-deterministic}\footnote{Here meant in the same sense that the lazy list monad is often use to model non-determinism.} symbolic evaluator. That is to say, a symbolic evaluator which, when given a single expression, would returns potentially multiple results. For example, when the evaluator would be applied to an expression \stt{$s$ = if ($c$) $t$ else $e$} whose condition $c$ it is not able to evaluate to a boolean literal, it would return all the possible expressions resulting from first evaluating the condition and both branches nondeterministically. We show some pseudo-code in \RefCode{lst:nondet}.\\
+The evaluator described in this chapter is \textit{deterministic}, in the sense that its evaluation function maps one expression to exactly one expression in a deterministic way. We believe that it could be worthwhile to investigate the the potential use cases of a so-called \textit{non-deterministic} evaluator. That is to say, an evaluator which, when given a single expression, would returns potentially multiple results. For example, when the evaluator would be applied to an expression \stt{$s$ = if ($c$) $t$ else $e$} whose condition $c$ it is not able to evaluate to a boolean literal, it would return all the possible expressions resulting from first evaluating the condition and both branches nondeterministically. We show some pseudo-code in \RefCode{lst:nondet}.\\
 
 One potential use case of such an evaluator that we see, when combined with a way to trigger its application in user-land code, is for implementing a symbolic \textit{partial order reduction} algorithm. In a bit more detail, the evaluator could be used to compute the set of (potentially symbolic) transitions that results from taking a step at a given (potentially symbolic) state.
-
-\begin{Code}{PureScala}{lst:symevalex}{Application of the 1st Futamura projection to a simple interpreter and program}
-sealed trait Expr
-case class Var(name: String)     extends Expr
-case class Num(value: Int)       extends Expr
-case class Add(l: Expr, r: Expr) extends Expr
-case class Mul(l: Expr, r: Expr) extends Expr
-
-def interpret(expr: Expr, ctx: Map[String, Int]): Int = expr match {
-  case Num(value) => value
-  case Var(name)  => ctx(name)
-  case Add(l, r)  => interpret(l, ctx) + interpret(r, ctx)
-  case Mul(l, r)  => interpret(l, ctx) * interpret(r, ctx)
-}
-
-val program: Expr = Mul(Num(10), Add(Var("x"), Num(2)))
-
-@symeval
-def compiled(ctx: Map[String, Int]): Int = {
-  interpret(program, ctx) // ==> 10 * (ctx("x") + 2)
-}
-\end{Code}
 
 \begin{Code}{PureScala}{lst:nondet}{Pseudo-code of a non-deterministc evaluator}
 def ndEval(expr: Expr, pc: PC): Stream[Expr] = {
@@ -1122,7 +1182,7 @@ Akka is a powerful Scala implementation of the Actor model, suitable for both co
 
 \subsubsection*{Notable Differences}
 
-While we initially set to mimic the API offered by the Akka Typed library\footnote{\url{https://doc.akka.io/docs/akka/2.5.4/scala/typed.html}}, we quickly ran into some limitations of Stainless's type system. Namely, the lack of an encoding for both existential types, and various issues with the encoding of co-/contravariant class hierarchies. While some of those issues got fixed over the last few months, we have been unable to provide a typed API similar in spirit to Akka Typed. For lack of time, we have decided to go with the untyped API described in \RefSec{actor-impl}.  \\
+While we initially set to mimic the API offered by the Akka Typed library\footnote{\url{https://doc.akka.io/docs/akka/2.5.4/scala/typed.html}}, we quickly ran into some limitations of Stainless's type system. Namely, the lack of an encoding for both existential types, and various issues with the encoding of co-/contravariant class hierarchies. While some of those issues got fixed over the last few months, we have been unable to provide a typed API similar in spirit to Akka Typed. For lack of time, we have decided to go with the untyped API described in \RefSec{actor-impl}.\\
 
 Another notable difference between our model and both the one implemented in Akka\footnote{\url{https://doc.akka.io/docs/akka/current/general/message-delivery-reliability.html}}, is that we rely on \textit{exactly-once} delivery of messages. We experimented with a weaker model that only relied on \textit{at-most-once} delivery but it quickly became clear that the amount of work needed to verify the very same systems we describe below would be too much in the context of this project.
 
@@ -1222,12 +1282,7 @@ self-reference is $n$, defined as $\emptyset_n := \stt{ActorContext}(n, \stt{Nil
 \subsection{Proving Invariants}
 \label{invariants}
 
-After having defined an Actor system with our framework, one might want to verify that this 
-system preserves some invariant between each step of its execution. That is to say, 
-for an \InlineS{ActorSystem} $s$, any two \ActorRef $n, m$,
-and an invariant \InlineS{inv: ActorSystem $\ \to\ $ Boolean}, if $\texttt{inv}(s)$ holds, 
-then $\texttt{inv}(s\texttt{.step}(n, m))$ should hold as well. We express this 
-property more formally in \RefFig{fig:stepinvariant}. This property can be easily expressed in PureScala, as shown in \RefCode{lst:preserveInv}.
+After having defined an Actor system with our framework, one might want to verify that this system preserves some invariant between each step of its execution. That is to say, for an \InlineS{ActorSystem} $s$, any two \ActorRef $n, m$, and an invariant \InlineS{inv: ActorSystem $\ \to\ $ Boolean}, if $\texttt{inv}(s)$ holds, then $\texttt{inv}(s\texttt{.step}(n, m))$ should hold as well. We express this property more formally in \RefFig{fig:stepinvariant}. Because we are essentially doing a proof by induction over execution steps here, one needs also to ensure the invariant holds for some initial system. These two properties can be easily expressed in PureScala, as shown in \RefCode{lst:preserveInv}.
 
 \begin{figure}[!h]
 $$\forall s: \stt{ActorSystem},\, n: \stt{ActorRef},\, m: \stt{ActorRef}.\ \stt{inv($s$)} \implies \stt{inv($s$.step($n, m$))}$$
@@ -1244,10 +1299,13 @@ def preserveInv(s: ActorSystem, n: ActorRef, m: ActorRef): Boolean = {
   require(inv(s))
   inv(s.step(n, m))
 } holds
-\end{Code}
 
-When encoutering such a definition, Stainless will generate a verification condition 
-equivalent to \RefFig{fig:stepinvariant}, which will then be discharged to Inox and the underlying SMT solver.
+def initial: ActorSystem = /* ... */
+
+def initialInv: Boolean = {
+  invariant(initial)
+} holds
+\end{Code}
 
 \subsection{Case studies}
 \label{casestudies}
@@ -1255,19 +1313,9 @@ equivalent to \RefFig{fig:stepinvariant}, which will then be discharged to Inox 
 \subsubsection{Increment-based Replicated Counter}
 \label{repcounterinc}
 
-As a first and very simple case study, we will study an Actor system which models a
-replicated counter, which can only be incremented by one unit. This system is 
-composed of two actors, a primary counter whose reference is \stt{Primary()},
-and a backup counter whose reference is \stt{Backup()}.
-Each of these reference is associated with a behavior: the primary counter reference with
-an instance of \stt{PrimaryB}, and the backup counter reference with an instance 
-of \stt{BackupB}, both of which hold a positive integer, representing the value of the
-counter. Whenever the primary actor receives a message \stt{Inc()}, it forwards that
-message to the backup actor, and returns a new instance of \stt{PrimaryB} with the
-counter incremented by one. When the backup actor receives an \stt{Inc()} message,
-it just returns a new instance of \stt{BackupB} with the counter incremented by one. 
-The corresponding PureScala implementation can be found
-in \RefCode{lst:ReplicatedCounterInc}.
+As a first and very simple case study, we will study an Actor system which models a replicated counter, which can only be incremented by one unit. This system is composed of two actors, a primary counter whose reference is \stt{Primary()},and a backup counter whose reference is \stt{Backup()}. Each of these reference is associated with a behavior: the primary counter reference with an instance of \stt{PrimaryB}, and the backup counter reference with an instance of \stt{BackupB}, both of which hold a positive integer, representing the value of the counter. Whenever the primary actor receives the message \stt{Inc()}, it forwards that message to the backup actor, and returns a new instance of \stt{PrimaryB} with the counter value incremented by one. When the backup actor receives the \stt{Inc()} message, it too returns a new instance of \stt{BackupB} with the counter value incremented by one. The corresponding PureScala implementation can be found in \RefCode{lst:ReplicatedCounterInc}.//
+
+We now want to verify that the following properties stay valid between at execution step: the \stt{Backup()} actor does not send itself any messages, both actors have the proper corresponding behavior, the value of the primary counter is equal to the value of the backup counter added to the number of \stt{Inc()} messages that are yet to be delivered to the backup actor. \RefCode{lst:repcounterincinv} presents the corresponding invariant, while \RefCode{lst:repcounterincthm} shows the invariant preservation theorem that we want to prove.
 
 \begin{Code}{PureScala}{lst:ReplicatedCounterInc}{Increment-based replicated counter implementation}
 case class Primary() extends ActorRef
@@ -1294,9 +1342,6 @@ case class BackupB(counter: BigInt) extends Behavior {
 }
 \end{Code}
 
-Given such a system, one might want to prove that the following invariant is 
-preserved between each step of its execution:
-
 \begin{Code}{PureScala}{lst:repcounterincinv}{Increment-based replicated counter invariant}
 def invariant(s: ActorSystem): Boolean = {
   s.inboxes((Backup(), Backup())).isEmpty && {
@@ -1308,10 +1353,6 @@ def invariant(s: ActorSystem): Boolean = {
   }
 }
 \end{Code}
-
-This invariant specifies that the \stt{Backup()} actor does not send itself any messages, that both actors have the proper corresponding behavior, and that, last but not least, the value of the primary counter is equal to the value of the backup counter added to the number of messages that are yet to be delivered to the backup actor.\\
-
-We can now define the actual theorem we want Stainless to prove for us:
 
 \begin{Code}{PureScala}{lst:repcounterincthm}{Replicated counter theorem (increment)}
 def preserveInv(s: ActorSystem, n: ActorRef, m: ActorRef): Boolean = {
@@ -1475,7 +1516,7 @@ def invariant(s: ActorSystem): Boolean = {
 \subsection{Spawning Actors}
 \label{spawn}
 
-\subsubsection*{Updating The Model}
+\subsubsection{Updating The Model}
 
 Up until now, our framework has only been able to model Actor systems with a static topology, ie. systems where no new actors besides the ones that are statically defined can be spawned. Let's now attempt to enrich our model to account for dynamic topologies.
 
@@ -1512,9 +1553,9 @@ case class ActorContext(
 As can be seen in the listing above, the context now keeps track of the names and 
 behaviors of the actors to be spawned, and provides a \stt{spawn} method which is in  charge of constructing the \ActorRef of the spawned actor, storing it along with the  behavior within the context, and returning the newly generated reference.
 
-\subsubsection*{Case Study}
+\subsubsection{Case Study}
 
-\RefCode{lst:spawncode} defines a simple system with a dynamic topology, where one actor named \stt{Primary} waits for a \stt{Spawn} message to spawn a child actor, and change its behavior from \stt{BeforeB} to \stt{AfterB} in order to keep track of the reference to the child. The invariant we would to verify holds here, states that, if the \stt{Primary} actor has behavior \stt{BeforeB()}, then the behavior associated with the \ActorRef of its child actor must be \stt{Stopped}. On the other hand, if the \stt{Primary} actor has behavior \stt{AfterB(child)}, then the behavior associated with \stt{child} must be \stt{ChildB}. This test case verifies promptly, provided the symbolic evaluator is enabled.
+\RefCode{lst:spawncode} defines a simple system with a dynamic topology, where one actor named \stt{Primary} waits for a \stt{Spawn} message to spawn a child actor, and change its behavior from \stt{BeforeB} to \stt{AfterB} in order to keep track of the reference to the child. The invariant we would to verify holds here, states that, if the \stt{Primary} actor has behavior \stt{BeforeB()}, then the behavior associated with the \ActorRef of its child actor must be \stt{Stopped}. On the other hand, if the \stt{Primary} actor has behavior \stt{AfterB(child)}, then the behavior associated with \stt{child} must be \stt{ChildB}. This test case verifies promptly, provided that the partial evaluator is enabled.
 
 \begin{Code}{PureScala}{lst:spawncode}{}
 case object Primary extends ActorRef("primary")
@@ -1560,7 +1601,7 @@ def theorem(s: ActorSystem, from: ActorRef, to: ActorRef): Boolean = {
 \subsection{Running an Actor System on Akka}
 \label{akka}
 
-While the verification of Actor systems is in itself an interesting endeavour, it is not of much use unless one is able to run these systems, potentially in a distributed environment. In the Scala ecosystem, the most widely used real-world Actor system is Akka \TODO{REF}. \RefCode{lst:akkashim} shows a shallow shim which allows to run an Actor system developed with our framework within Akka, with only a few alterations to the original program. With this shim, the \ActorRef type is mapped to Akka's \ActorRef, while the \stt{ActorContext} now only contains the actor's self-reference, as well as the underlying Akka context. The shim also defines an actual Akka actor, parametrized by an underlying \stt{Behavior}, to which all messages of type \stt{Msg} will be delegated. The \stt{ActorSystem} class becomes abstract, and concrete subclasses need to provide it with an actual Akka system, as well as provide an implementation of its \stt{run} method. Within this method, one can spawn new top-level actors, get a reference to those, and send them messages. \RefCode{lst:akkashimex} shows such an implementation for the replicated counter described in \RefSec{repcounterinc}.
+While the verification of Actor systems is in itself an interesting endeavour, it is not of much use unless one is able to run these systems, potentially in a distributed environment. Thanks to the shim presented in \RefCode{lst:akkashim}, it is effectively possible run an Actor system developed with our framework on top of Akka, with only a few alterations to the original program. With this shim, the \ActorRef type is mapped to Akka's \ActorRef, while the \stt{ActorContext} now only contains the actor's self-reference, as well as the underlying Akka context. The shim also defines an actual Akka actor, parametrized by an underlying \stt{Behavior}, to which all messages of type \stt{Msg} will be delegated. The \stt{ActorSystem} class becomes abstract, and concrete subclasses need to provide it with an actual Akka system, as well as provide an implementation of its \stt{run} method. Within this method, one can spawn new top-level actors, get a reference to those, and send them messages. \RefCode{lst:akkashimex} shows such an implementation for the replicated counter described in \RefSec{repcounterinc}.
 
 \begin{Code}{PureScala}{lst:akkashim}{Akka shim for our Actor framework}
 import akka.actor
@@ -1719,7 +1760,7 @@ We draw the reader's attention to the similarity between the two types, and note
 
 Although session types were originally meant to be implemented as a separate syntactic category of types and terms to be added to the $\pi$-calculus, it has been shown that it possible to encode them directly in a calculus or language with both \textit{linear types} and \textit{variants} \cite{Wadler:2012:PS:2364527.2364568, Dardha:2012:STR:2370776.2370794}.\\
 
-While there are many ways to perform such an encoding and provide a collection of combinators to build values of such types while enforcing the associated safety properties, the existing approaches \cite{st_lin_haskell, Jespersen:2015:STR:2808098.2808100} either rely on more expressive type systems than the one provided by Stainless, eg. \textit{substructural type systems} or ones which provide \textit{path families}, \textit{higher-kinded types} and \textit{indexed monads}, or \textit{path-dependent types}. In the next section we look at a solution to this problem which only require minimal and orthogonal modifications to Stainless's type system.
+While there are many ways to perform such an encoding and provide a collection of combinators to build values of such types while enforcing the associated safety properties, the existing approaches \cite{st_lin_haskell, Jespersen:2015:STR:2808098.2808100} either rely on more expressive type systems than the one provided by Stainless, eg. \textit{substructural type systems} or ones which provide \textit{path families}, \textit{higher-kinded types} and \textit{indexed monads}, or \textit{path-dependent types}. \TODO{\RefCode{full-sessions} presents such an implementation in Scala.} In the next section we look at a solution to this problem which only require minimal and orthogonal modifications to Stainless's type system.
 
 \subsection{Value-Level Sessions Encoding}
 
@@ -2147,6 +2188,10 @@ def menu(card: String)(menu: Linear[Menu]): Unit = {
 
 \subsection{Further Work}
 
+\subsubsection*{Actor Systems with Linear References}
+
+\TODO{Actor Systems with Linear References}
+
 \subsubsection*{Multiparty Session Types for Actor Systems}
 
 \cite{DBLP:journals/corr/NeykovaY16}
@@ -2161,12 +2206,22 @@ After implementing a very basic borrow checker with static lifetimes within Stai
 
 \TODO{Conclusion}
 
+\clearpage
+
 \appendix
+
+\begin{landscape}
+\section{Scala Implementation of Sessions Types}
+\label{full-sessions}
+\lstinputlisting[language=PureScala, style=LongCode]{code/full-sessions.scala}
+\end{landscape}
 
 \clearpage
 
 %\nocite{*}
 \bibliographystyle{ieeetr}
 \bibliography{report}
+
+
 
 \end{document}

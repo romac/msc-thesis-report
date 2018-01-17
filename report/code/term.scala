@@ -1,5 +1,6 @@
 
 import stainless.lang._
+import stainless.annotation._
 import stainless.collection._
 
 object term {
@@ -26,25 +27,30 @@ object term {
     if (n == 0) i(a, 0) else a
   }
 
-  def ok1 = {
+  @symeval
+  def bad0 = {
     f(List(1)) == Nil[BigInt]()
   } holds
 
+  @symeval
   def bad1 = {
     g(List(1)) == Nil[BigInt]()
   } holds
 
-  def bad2 = {
+  @symeval
+  def ok0 = {
     h(Nil()) == Nil[BigInt]()
   } holds
 
-  def bad3 = {
+  @symeval
+  def ok1 = {
     i(true, 0) == true
   } holds
 
+  @symeval
   def test(a: List[BigInt]) = {
     require(a.nonEmpty)
-    lemma(a) == Some(BigInt(0))
+    lemma(a) != None[BigInt]()
   } holds
 
   def lemma(a: List[BigInt]): Option[BigInt] = {
