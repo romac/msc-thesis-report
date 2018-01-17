@@ -310,53 +310,197 @@
 \subsection{Motivation}
 \label{symbolic-motivation}
 
-\TODO{Rewrite}
+Let's consider the following program:
 
-Consider the following program, which inserts a known list of key-value pairs in a map that is kept abstract:
-
-\begin{ShortCode}{PureScala}
+\begin{Code}{PureScala}{lst:symintro}{Example program}
 def foldLeft[A, B](list: List[A], z: B)(f: (B, A) => B): B = list match {
-  case Nil() => z
-  case Cons(x, xs) => foldLeft(xs, f(z, x))(f)
+  case Nil     => z
+  case x :: xs => foldLeft(xs, f(z, x))(f)
 }
 
 def insert[A, B](kvs: List[(A, B)], map: Map[A, B]) = {
   foldLeft(kvs, map) {
-    case (acc, (k, v)) => acc.updated(k, v)
+    case (acc, (k, v)) if !acc.contains(k) => acc.updated(k, v)
+    case (acc, _)                          => acc
   }
 }
 
-def test(map: Map[String, Int]): Boolean = {
-  val xs = List("a" -> 1, "b" -> 2, "c" -> 3, "d" -> 4)
+def test(map: Map[String, Int], x: Int, y: Int): (Int, Map[String, Int]) = {
+  require(!map.contains("a") && map.contains("b"))
+
+  val xs  = ("a", x) :: ("b", y) :: Nil
   val res = insert(xs, map)
-  res("b") == 2
-}.holds
-\end{ShortCode}
 
-For the sake of simplicity, let us assume that Stainless is unable to automatically prove the verification condition corresponding to \stt{test}'s postcondition (we will look at an actual test case in \RefSec{symcases}).\\
+  res("a") == x && res("b") == map("b")
+} holds
+\end{Code}
 
-So, how would one go about to help Stainless prove this program correct? We could for example break up the problem, by adding appropriate postconditions to both \stt{foldLeft} and \stt{insert}, and provide the necessary lemmas, assertions, or annotations in order to get these to verify.\\
+Although this program is correct, Stainless is unfortunately unable to prove the verification condition corresponding to \stt{test}'s postcondition on its own. To remedy to this problem, one could refine the program by adding contracts to the \stt{foldLeft} and \stt{insert} functions, or introduce additional lemmas. While this is a reasonable way of going at the problem, we will discuss in this chapter an alternative way of proving such programs correct. The main insight we will make use of is that, although none of the arguments to \stt{insert} are fully known within the \stt{test} function, the knowledge we have of \stt{map} from \stt{test}'s precondition combined with the known structure of \stt{xs} is enough to \textit{partially evaluate} in a \textit{symbolic} way the body of the function, yielding a much simpler expression which in turn makes the postcondition much easier to verify. Before we discuss this idea in greater details, let's look at how one would "manually" prove correct the above program:
 
-While this is a reasonable way of going at the problem, we feel that for this specific program, there is another way of tackling the problem. Indeed, while the \stt{map} variable is kept abstract, the list of values \stt{xs} we want to insert is not, and it should thus be possible to simplify the initial program by unfolding some definitions, and simplifying the resulting expressions, yielding a much simpler verification condition.\\
+\begin{enumerate}
 
-If we manually unfold \stt{insert} once, then unfold \stt{foldLeft} "as much as possible" in the program above, we end up with the following definition for the \stt{test} function, which is both much smaller and simpler than the original definition. We could then expect Stainless to have an easier time proving this theorem.
+\item Let's consider the call to \stt{insert} in the \stt{test} function:
 
 \begin{ShortCode}{PureScala}
-def test(map: Map[String, Int]): Boolean = {
-  val res = map.updated("a", 1).updated("b", 2).updated("c", 3).updated("d", 4)
-  res("b") == 2
-}.holds
+insert(xs, map)
 \end{ShortCode}
 
-We believe that it is unreasonable to expect users to manually perform such a transformation, especially with large programs. In the next section, we propose a fully automatic solution to this problem.
+\item We start by substituting \stt{xs} for its value:
 
-\subsection{Symbolic Evaluation and Partial Evaluation}
+\begin{ShortCode}{PureScala}
+insert(("a", x) :: ("b", y) :: Nil, map)
+\end{ShortCode}
 
-\cite{partialsym} \TODO{Rewrite}
+\item We then unfold the definition of \stt{insert}:
 
-The process of executing a program in the presence of abstract inputs is known as \textit{partial evaluation}.
+\begin{ShortCode}{PureScala}
+foldLeft(("a", x) :: ("b", y) :: Nil, map) {
+  case (acc, (k, v)) if !acc.contains(k) => acc.updated(k, v)
+  case (acc, _)                          => acc
+}
+\end{ShortCode}
 
-The idea is to partially evaluate a program with symbolic inputs values while also maintaining a \textit{path condition}: a quantifier-free formula in conjunctive normal form which encodes the knowledge we have gathered so far about the symbolic values we are dealing with, as well as the bindings in scope. When encountering a boolean expression, the evaluator can then make use of the path condition to determine the value of that expression.
+\item We now unfold the definition of \stt{foldLeft}:
+
+%The idea here is that a recursive function must contain a \textit{guarded} recursive call to be terminating, as it would otherwise call itself recursively indefinitely and thus not terminate (we discuss termination in more detail in \RefSec{termination}). We can thus look at the function's body, and see whether it contains a conditional expression whose condition can be reduced to a boolean literal under the current path condition. If that is not the case, we cannot safely unfold the function and we stop here. Otherwise, we can replace the conditional expression by the appropriate branch, and evaluate the resulting expression under the new path condition induced by the condition. As long as the function is terminating, this process will terminate as we are either going to end up with a branch that does not contain a recursive call, or we will not be able to evaluate the condition to a boolean value and will thus not proceed further.\\
+
+%In the case of \stt{foldLeft}, there is indeed such a conditional expression, and under the current path condition, we are able to evaluate \stt{list.isInstanceOf[Nil]} to \stt{false} given that the path condition contains \stt{list = Cons("a" -> 1, ...)}. We can thus unfold it, replace the "if-then-else" expression by its "else" branch, and continue:
+
+\begin{ShortCode}{PureScala}
+val f = {
+  case (acc, (k, v)) if !acc.contains(k) => acc.updated(k, v)
+  case (acc, _)                          => acc
+}
+
+(("a", x) :: ("b", y) :: Nil) match {
+  case Nil     => map
+  case x :: xs => foldLeft(xs, f(z, x))(f)
+}
+\end{ShortCode}
+
+For legibility, we have assigned the supplied match expression to a variable instead of inlining it straight away.
+
+\item We select the second case of the pattern match:
+
+\begin{ShortCode}{PureScala}
+val f = {
+  case (acc, (k, v)) if !acc.contains(k) => acc.updated(k, v)
+  case (acc, _)                          => acc
+}
+
+foldLeft("b" -> y :: Nil, f(map, ("a", x)))(f)
+\end{ShortCode}
+
+\item We now evaluate the first two arguments of the call to \stt{foldLeft}. The first one stays as is as it is already in normal form. The second argument \InlineS{f(map, ("a", x))} becomes:
+
+\begin{ShortCode}{PureScala}
+(map, ("a", x)) match {
+  case (acc, (k, v)) if !acc.contains(k) => acc.updated(k, v)
+  case (acc, _)                          => acc
+}
+\end{ShortCode}
+
+\item Recall the precondition of the \stt{test} function: \InlineS{!map.contains("a") && map.contains("b")}. When we inline the scrutinee into the guard of the first case, we obtain \InlineS{!map.contains("a")}, which by the aforementioned precondition we can deduce is \InlineS{true}. We thus select the first case, and inline the scrutinee within it, yielding:
+
+\begin{ShortCode}{PureScala}
+map.updated("a", x)
+\end{ShortCode}
+
+\item We are now left with this expression:
+
+\begin{ShortCode}{PureScala}
+foldLeft("b" -> y :: Nil, map.updated("a", x))(f)
+\end{ShortCode}
+
+\item We can now unfold \stt{foldLeft} one more time:
+
+\begin{ShortCode}{PureScala}
+(("b", y) :: Nil) match {
+  case Nil     => map.updated("a", x)
+  case x :: xs => foldLeft(xs, f(z, x))(f)
+}
+\end{ShortCode}
+
+\item Once again, we recurse in the second case of the match expression:
+
+\begin{ShortCode}{PureScala}
+foldLeft(Nil, f(map.updated("a", x), ("b", y)))(f)
+\end{ShortCode}
+
+\item We now unfold the definition of \stt{f} in \InlineS{f(map.updated("a", x), ("b", y))}, yielding:
+
+\begin{ShortCode}{PureScala}
+(map.updated("a", x), ("b", y)) match {
+  case (acc, (k, v)) if !acc.contains(k) => acc.updated(k, v)
+  case (acc, _)                          => acc
+}
+\end{ShortCode}
+
+\item Recall once again the precondition of the \stt{test} function: \InlineS{!map.contains("a") && map.contains("b")}. This time, the guard reads as \InlineS{!map.contains("b")}, which by precondition we can deduce is \InlineS{false}. We thus select the second case, and inline the scrutinee within it, yielding:
+
+\begin{ShortCode}{PureScala}
+map.updated("a", x)
+\end{ShortCode}
+
+\item We are now left with this expression:
+
+\begin{ShortCode}{PureScala}
+foldLeft(Nil, map.updated("a", x))(f)
+\end{ShortCode}
+
+\item We can now unfold \stt{foldLeft} one last time:
+
+\begin{ShortCode}{PureScala}
+Nil match {
+  case Nil     => map.updated("a", x)
+  case x :: xs => foldLeft(xs, f(z, x))(f)
+}
+\end{ShortCode}
+
+\item This time, we recurse in the first case, which leaves us with:
+
+\begin{ShortCode}{PureScala}
+map.updated("a", x)
+\end{ShortCode}
+
+\item At last, we substitute this expression for the call to \stt{insert} within \stt{test}'s body, resulting in:
+
+\begin{ShortCode}{PureScala}
+def test(map: Map[String, Int], x: Int, y: Int): (Int, Map[String, Int]) = {
+  require(!map.contains("a") && map.contains("b"))
+
+  val xs  = ("a", x) :: ("b", y) :: Nil
+  val res = map.updated("a", x)
+
+  res("a") == x && res("b") == map("b")
+} holds
+\end{ShortCode}
+
+\item This expression cannot be reduced further, as \stt{map} is abstract and \stt{updated} is a special language construct which can only be evaluated when applied to a concrete, finite map.
+
+\item If one knows the semantics of \stt{Map}, it becomes fairly obvious that the postcondition is valid, for any initial value of \stt{map}, \stt{x} and \stt{y}.
+
+\end{enumerate}
+
+We want to draw the reader's attention to the fact that the actual values \stt{x} and \stt{y} did not play any role in this process. Moreover, while the exact content of the \stt{Map} underlying the \stt{map} variable was unknown, we knew enough about it from the precondition of \stt{test} to successfully reduce the program to a simple expression. We formalise this whole process in the next section.
+
+\subsection{Symbolic Partial Evaluation}
+
+Let's first get a couple of definitions out of the way:
+
+\begin{itemize}
+\item \textit{Partial evaluation} is the process of executing a program in the presence of partial inputs.
+\item \textit{Symbolic evaluation} is the process of gathering knowledge about symbolic values in a program by executing it.
+\item A \textit{path condition} is a quantifier-free formula in conjunctive normal form which encodes the knowledge we have gathered so far about some symbolic values.
+\end{itemize}
+
+Combining both techniques into a single evaluation procedure, ie. a procedure which partially evaluates a program with symbolic inputs while maintaining a \textit{path condition}, has been shown to increase both performance and reasoning abilities of verifications systems in some cases \cite{partialsym}. We call such a procedure a \textit{symbolic partial evaluator}.\\
+
+
+
+When encountering a boolean expression, the evaluator can then make use of the path condition to determine the value of that expression.  both partial and symbolic evaluation at the same time 
+
+For example, when the evaluator encounters an expression $e$ of type \stt{Boolean} under a path condition $p$, 
 
 When encountering a conditional expression $E = \stt{if ($c$) $t$ else $e$}$, under the current path condition, the result of which we will denote by $c'$. If $c'$ is a boolean literal, we then evaluate the appropriate branch, and continue from here. Otherwise, we check whether the  formula $p \implies c'$ is valid. If we are able to show that it is indeed valid, we recurse into the "then" branch of the conditional expression under new path condition $p \wedge c'$. Otherwise, we instead check whether the formula $p \implies \neg\,c'$ is valid, in which case we recurse into its "else" branch under the path condition $p \wedge \neg\,c'$. At last, if we are unable to show that either formula is valid, we evaluate both branches under their respective path conditions, and we denote the results respectively by $t'$ and $e'$. Finally, we return \stt{if ($c'$) $t'$ else $e'$}. \\
 
@@ -383,139 +527,6 @@ When encountering a conditional expression $E = \stt{if ($c$) $t$ else $e$}$, un
   bar(-x)
 }
 \end{Code}
-
-\subsubsection{Example}
-
-Here is how the program we introduced in \RefSec{symbolic-motivation} is expressed in Inox's input language, formatted in PureScala syntax:
-
-\begin{ShortCode}{PureScala}
-def foldLeft[A](list: List[A], z: B, f: (B, A) => B): B =
-  if (list.isInstanceOf[Nil[A]]) {
-    z
-  } else {
-    val x  = list.asInstanceOf[Cons[A]].head
-    val xs = list.asInstanceOf[Cons[A]].tail
-    foldLeft(xs, f(z, x), f)
-  }
-}
-
-def insert[A, B](values: List[(A, B)], map: Map[A, B]) = {
-  foldLeft(xs, map, (acc, kv) => acc.updated(kv._1, kv._2))
-}
-
-def test(map: Map[String, Int]): Boolean = {
-  val xs = List("a" -> 1, "b" -> 2, "c" -> 3, "d" -> 4)
-  val res = insert(xs, map)
-  res("b") == 2
-}.holds
-\end{ShortCode}
-
-Let's only focus on the first two lines of the \stt{test} function, and go through the steps followed by the evaluator when ran on it. 
-
-\begin{ShortCode}{PureScala}
-val xs = List("a" -> 1, "b" -> 2, "c" -> 3, "d" -> 4)
-val res = insert(xs, map)
-\end{ShortCode}
-
-\begin{enumerate}
-
-\item We start by substituting the first binding into the subsequent statement:
-
-\begin{ShortCode}{PureScala}
-val res = insert(
-  Cons("a" -> 1, Cons("b" -> 2, Cons("c" -> 3, Cons("d" -> 4, Nil()),
-  map
-)
-\end{ShortCode}
-
-\item Because \stt{insert} is non-recursive function, we can unfold it straight away:
-
-\begin{ShortCode}{PureScala}
-val res = foldLeft(
-  Cons("a" -> 1, Cons("b" -> 2, Cons("c" -> 3, Cons("d" -> 4, Nil()),
-  map,
-  (acc, kv) => acc.updated(kv._1, kv._2)
-)
-\end{ShortCode}
-
-\item \stt{foldLeft} is a recursive function, and some care is thus needed in order to not end up unfolding it indefinitely.\\
-
-The idea here is that a recursive function must contain a \textit{guarded} recursive call to be terminating, as it would otherwise call itself recursively indefinitely and thus not terminate (we discuss termination in more detail in \RefSec{termination}). We can thus look at the function's body, and see whether it contains a conditional expression whose condition can be reduced to a boolean literal under the current path condition. If that is not the case, we cannot safely unfold the function and we stop here. Otherwise, we can replace the conditional expression by the appropriate branch, and evaluate the resulting expression under the new path condition induced by the condition. As long as the function is terminating, this process will terminate as we are either going to end up with a branch that does not contain a recursive call, or we will not be able to evaluate the condition to a boolean value and will thus not proceed further.\\
-
-In the case of \stt{foldLeft}, there is indeed such a conditional expression, and under the current path condition, we are able to evaluate \stt{list.isInstanceOf[Nil]} to \stt{false} given that the path condition contains \stt{list = Cons("a" -> 1, ...)}. We can thus unfold it, replace the "if-then-else" expression by its "else" branch, and continue:
-
-\begin{ShortCode}{PureScala}
-val res = {
-  val x  = Cons("a" -> 1, Cons("b" -> 2, ...)).asInstanceOf[Cons[A]].head
-  val xs = Cons("a" -> 1, Cons("b" -> 2, ...)).asInstanceOf[Cons[A]].tail
-  foldLeft(xs, ((acc, kv) => ...)(map, x), (acc, kv) => ...)
-}
-\end{ShortCode}
-
-\item Here we can evaluate the bound value of \stt{x} (note: we evaluate both bindings in one go here for brevity):
-
-\begin{ShortCode}{PureScala}
-val res = {
-  val x  = "a" -> 1
-  val xs = Cons("b" -> 2, ...)
-  foldLeft(xs, ((acc, kv) => ...)(map, x), (acc, kv) => ...)
-}
-\end{ShortCode}
-
-\item We now inline both bindings (again, in one go for the sake of brevity):
-
-\begin{ShortCode}{PureScala}
-val res = {
-  foldLeft(
-    Cons("b" -> 2, ...),
-    ((acc, kv) => ...)(map, "a" -> 1),
-    (acc, kv) => ...
-  )
-}
-\end{ShortCode}
-
-\item We can then evaluate the arguments supplied to \stt{foldLeft}, giving us:
-
-\begin{ShortCode}{PureScala}
-val res = {
-  foldLeft(
-    Cons("b" -> 2, ...),
-    map.updated("a", 1),
-    (acc, kv) => ...
-  )
-}
-\end{ShortCode}
-
-\item As we have encountered another call to a recursive function, we repeat steps 3 to 6 three times, at which point we are left with:
-
-\begin{ShortCode}{PureScala}
-val res = {
-  foldLeft(
-    Nil(),
-    map.updated("a", 1).updated("b", 2).updated("c", 3).updated("d", 4),
-    (acc, kv) => ...
-  )
-}
-\end{ShortCode}
-
-\item This time, in step 3, the condition evaluates to \stt{true}, and we thus pick the "then" branch which leaves us with the following expression:
-
-\begin{ShortCode}{PureScala}
-val res = map.updated("a", 1).updated("b", 2).updated("c", 3).updated("d", 4)
-\end{ShortCode}
-
-\item This expression cannot be reduced further, as \stt{map} is abstract and \stt{updated} is a special language construct which can only be evaluated when applied to a concrete, finite map. We thus stop here.
-
-\end{enumerate}
-
-This whole process leaves us with the very same definition we would have obtained by equational reasoning, which is admittedly much simpler, and easier to reason about for Inox.
-
-\begin{ShortCode}{PureScala}
-def test(map: Map[String, Int]): Boolean = {
-  val res = map.updated("a", 1).updated("b", 2).updated("c", 3).updated("d", 4)
-  res("b") == 2
-}.holds
-\end{ShortCode}
 
 \subsection{Semantics}
 
