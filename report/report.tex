@@ -354,13 +354,13 @@ We believe that it is unreasonable to expect users to manually perform such a tr
 
 \cite{partialsym} \TODO{Rewrite}
 
-The process of executing a program in the presence of abstract inputs is known as \textit{partial evaluation}. The idea is to execute the program over symbolic inputs values while maintaining a \textit{path condition}: a quantifier-free formula in conjunctive normal form which encodes the knowledge we have gathered so far about the symbolic values we are dealing with, as well as the bindings in scope. When encountering a boolean expression, the evaluator can make use of path condition to determine the value of that expression.
+The process of executing a program in the presence of abstract inputs is known as \textit{partial evaluation}.
 
-As another example, encountering a conditional expression $E = \stt{if ($c$) $t$ else $e$}$, under the current path condition, the result of which we will denote by $c'$. If $c'$ is a boolean literal, we then evaluate the appropriate branch, and continue from here. Otherwise, we check whether the  formula $p \implies c'$ is valid. If we are able to show that it is indeed valid, we evaluate the "then" branch of the conditional expression under new path condition $p \wedge c'$. Otherwise, we instead check whether the formula $p \wedge \neg\,c'$ is satisfiable, and if that is the case we evaluate the "else" branch under the new path condition $p \wedge \neg\,c'$. If we are unable to show that either formula is satisfiable, we evaluate both branches under their respective path condition, the result of which we will denote by $t'$ and $e'$, respectively, and we return \stt{if ($c'$) $t'$ else $e'$}. \\
+The idea is to partially evaluate a program with symbolic inputs values while also maintaining a \textit{path condition}: a quantifier-free formula in conjunctive normal form which encodes the knowledge we have gathered so far about the symbolic values we are dealing with, as well as the bindings in scope. When encountering a boolean expression, the evaluator can then make use of the path condition to determine the value of that expression.
 
-\TODO{Reformulate in term of validity of PC => c}
+When encountering a conditional expression $E = \stt{if ($c$) $t$ else $e$}$, under the current path condition, the result of which we will denote by $c'$. If $c'$ is a boolean literal, we then evaluate the appropriate branch, and continue from here. Otherwise, we check whether the  formula $p \implies c'$ is valid. If we are able to show that it is indeed valid, we recurse into the "then" branch of the conditional expression under new path condition $p \wedge c'$. Otherwise, we instead check whether the formula $p \implies \neg\,c'$ is valid, in which case we recurse into its "else" branch under the path condition $p \wedge \neg\,c'$. At last, if we are unable to show that either formula is valid, we evaluate both branches under their respective path conditions, and we denote the results respectively by $t'$ and $e'$. Finally, we return \stt{if ($c'$) $t'$ else $e'$}. \\
 
-\RefCode{lst:PC} shows a simple program annotated with the current path condition are various points of execution. When evaluating such a program symbolically, the path condition enables the evaluator to pick the "else" branch of the "if-then-else" expression, because, under the path condition at step 2, the condition \stt{x > 0} evaluates to \stt{false}.
+\RefCode{lst:PC} shows a simple program annotated with the current path condition at various points of execution. When evaluating such a program symbolically, the path condition enables the evaluator to pick the "else" branch of the "if-then-else" expression, because, under the path condition at step 2, the condition \stt{x > 0} evaluates to \stt{false}.
 
 \begin{Code}{PureScala}{lst:PC}{Example program annotated with path condition}
 // Expression before evaluation:
@@ -521,9 +521,7 @@ def test(map: Map[String, Int]): Boolean = {
 
 We subsequently denote the path condition by $\Delta$, a formula $e$ that is satisfiable under $\Delta$ by $e \in \Delta$. and a variable $v$ that is bound to an expression $e$ under $\Delta$ by $v \mapsto_\Delta e$. We will not delve into the details of how to decide whether a given condition is satisfiable under some path condition, but a reasonable although much too simplistic approximation would be to maintain a set of expressions and simply testing for membership. The actual implementation found in Inox (which predates our work) is much more complex and powerful implementation of this very idea. Moreover, we denote the fact that an expression $e$ evaluates to an expression $e'$ under a path condition $\Delta$ by $\lb{e}{\Delta} \longrightarrow e'$. Given $c, v$ two expressions, and \stt{x} a variable, we note $\Delta \cup c$ the addition of $c$ as a conjunct to the path condition $\Delta$, and $\Delta \uplus x \mapsto v$ the addition of the binding \stt{val x = $v$}. At last, the fact that an expression $e$ can be simplified to a boolean value under a path condition $\Delta$ is captured by $\stt{e} \Downarrow \Delta$. \RefFig{fig:symbolicsem} shows the operation semantics followed by our implementation, expressed in those terms.
 
-%\begin{itemize}
-%\item \textbf{Rule 1.} 
-%\end{itemize}
+\TODO{Describe pattern matches, assume, and invoke}
 
 \begin{figure}[htb]
 \begin{framed}
@@ -726,6 +724,15 @@ We subsequently denote the path condition by $\Delta$, a formula $e$ that is sat
 }
 \end{equation}
 
+\begin{equation}
+\dfrac{
+  \stt{$e$.getType} = \stt{MatchExpr} \quad
+  \lb{\stt{matchToIfThenElse($e$)}}{\Delta} \longrightarrow e'
+}{
+  \lb{e}{\Delta} \longrightarrow e'
+}
+\end{equation}
+
 \end{framed}
 \vspace{-10pt}
 \caption{Operational semantics of the symbolic partial evaluator \label{fig:symbolicsem}}
@@ -850,16 +857,16 @@ We subsequently denote the path condition by $\Delta$, a formula $e$ that is sat
 We have implemented the symbolic partial evaluator described above within Stainless\footnote{\url{https://github.com/romac/stainless/tree/stainless-sym}}.
 In order to invoke the partial evaluator on a function definition, a user must supply the new \stt{--partial-eval} flag and annotate the function with the \stt{@partialEval} annotation. Any such function will then be partially evaluated,  and its body will be substituted by resulting expression. Enabling the \stt{partial-eval} debug section instructs Stainless to print the result of the evaluation. This effectively enable users to use Stainless as a symbolic partial evaluator for PureScala program.
 
-\subsubsection{Path Condition Satisfiability}
+\subsubsection{Path Condition}
 
 Our initial implementation 
 
 \subsection{Case Study: Key-value Store Algebra}
 \label{symcases}
 
-\RefCode{lst:symkvstore} shows the implementation of a domain-specific language to manipulate a key-value store, along with a tracing interpreter over a Scala \stt{Map}. An simple program which makes use of this DSL to insert a list of concrete values into the store is shown in \RefCode{lst:symkvstoreinv}. Turning on the partial evaluator allows Stainless to prove the validity of \stt{result}'s postcondition, which gets turned into:
+In \RefCode{lst:symkvstore}, we define a monadic domain-specific language to manipulate a key-value store, along with a tracing interpreter which maps the operations over a PureScala \stt{Map}. A simple program which makes use of this DSL to insert a list of concrete values into the store is shown in \RefCode{lst:symkvstoreinv}. Without additional lemmas, Stainless is unfortunately unable to verify the postcondition of the \stt{result} function. On the other hand, turning on the partial evaluator turns the associated verification condition into a much more concrete form, which in turns allow the verification to promptly go through. We will note that, although the exact amount of \textit{fuel} we give to the interpreter is unknown, the precondition of the \stt{result} function constrains it to be greater than 10. Because the program expressed in that DSL requires less than 10 steps to be fully interpreted, the evaluator is able to reduce it to normal form, something which would not be possible with a non-symbolic partial evaluator.
 
-\begin{ShortCode}{PureScala}
+\begin{Code}{PureScala}{lst:kvvc}{Partially evaluated verification condition}
 val (res, trace) = (
   map.updated("foo", "bar").updated("toto", "tata")("foo"),
   Get("foo") :: Put("toto", "tata") :: Put("foo", "bar") :: init
@@ -867,7 +874,7 @@ val (res, trace) = (
 
 res == Some("bar") &&
 trace.take(3) == Get("foo") :: Put("toto", "tata") :: Put("foo", "bar") :: Nil()
-\end{ShortCode}
+\end{Code}
 
 \begin{Code}{PureScala}{lst:symkvstoreinv}{Example program}
 def insert(kvs: List[(String, String)])(after: Op): Op = kvs match {
@@ -883,9 +890,9 @@ val program = insert(xs) {
 }
 
 @symeval
-def result(map: Map[String, String], init: List[Label], n: BigInt) = {
-  require(n > 10)
-  interpret(program)(map, init, n)
+def result(map: Map[String, String], init: List[Label], fuel: BigInt) = {
+  require(fuel > 10)
+  interpret(program)(map, init, fuel)
 } ensuring { case (res, trace) => prop(res, trace) }
 
 @inline
@@ -916,19 +923,19 @@ def get(key: String)(next: Option[String] => Op): Op    = Get(key, next)
 def put(key: String, value: String)(next: () => Op): Op = Put(key, value, next)
 def pure(value: Option[String]): Op                     = Pure(value)
 
-def interpret(op: Op)(kv: Map[String, String], trace: List[Label], n: BigInt): (Option[String], List[Label]) = {
-  require(n >= 0)
-  decreases(n)
+def interpret(op: Op)(kv: Map[String, String], trace: List[Label], fuel: BigInt): (Option[String], List[Label]) = {
+  require(fuel >= 0)
+  decreases(fuel)
 
   op match {
     case Pure(value) =>
       (value, trace)
 
-    case Get(key, next) if n > 0 =>
-      interpret(next(kv.get(key)))(kv, Label.Get(key) :: trace, n - 1)
+    case Get(key, next) if fuel > 0 =>
+      interpret(next(kv.get(key)))(kv, Label.Get(key) :: trace, fuel - 1)
 
-    case Put(key, value, next) if n > 0 =>
-      interpret(next())(kv.updated(key, value), Label.Put(key, value) :: trace, n - 1)
+    case Put(key, value, next) if fuel > 0 =>
+      interpret(next())(kv.updated(key, value), Label.Put(key, value) :: trace, fuel - 1)
 
     case _ =>
       (None(), trace)
@@ -939,7 +946,7 @@ def interpret(op: Op)(kv: Map[String, String], trace: List[Label], n: BigInt): (
 
 \subsection{1st Futamura Projection}
 
-If one were to implement an interpreter for a (domain specific) language $L$ in PureScala, and then write a program $p$ in this language, one could then partially evaluate the interpreter applied to the program, while keeping the inputs and I/O operations abstract. The resulting expression could then be seen as a "compiled" version of the original program, represented as a PureScala program, which could then be linked to a small runtime and be compiled to a lower-level language using the infrastructure provided by the Scala language itself, PureScala being a strict subset of Scala.\\
+Let us consider the case where one were to define a language, implement an interpreter for it in PureScala, and then write a program in this language. One could then partially evaluate the interpreter applied to the program, while keeping the inputs and I/O operations abstract. The resulting expression could then be seen as a "compiled" version of the original program, represented as a PureScala program, which can be linked to a small runtime and compiled to a lower-level language using the infrastructure provided by the Scala language itself, PureScala being a strict subset of Scala.\\
 
 The technique of partially evaluating an interpreter over a known program is known as the \textit{1st Futamura projection} \cite{futamura}, and can theoretically be applied to the partial evaluator itself, yielding a compiler (the 2nd projection) or even a converter from any interpreter to a compiler (3rd projection).\RefCode{lst:symevalex} features an example involving an interpreter for a simple language with variables, arithmetic expressions and an I/O operation.
 
@@ -1008,42 +1015,42 @@ def test(y: Int) = {
 } ensuring { _.isLeft }
 \end{Code}
 
-\subsubsection*{Evaluation of Non-Terminating Programs}
+\subsection{Termination}
 
-As Stainless already comes with a powerful termination checker, we believe that it make little sense to re-implement one within Inox. Instead, we simply suggest to only enable the partial evaluator on functions which have been proved terminating by Stainless. As an additional measure, we have bounded the maximum number of evaluation steps that can be performed. This ensure that, should one still run the evaluator on a non-termination function, Stainless will not hang or crash.\\
+As Stainless comes with a powerful termination checker, we suggest to only enable the partial evaluator on functions which have been proved terminating by Stainless. As an additional measure, we have bounded the maximum number of evaluation steps that can be performed. This ensure that, should one still run the evaluator on a non-termination function, Stainless will not hang or crash.\\
 
-Regarding termination checking, we have ensured that the partial evaluator cannot be enabled when checking termination in Stainless, as doing so could prevent the termination checker to itself terminate, or even yield incorrect results.
-
-\begin{Code}{PureScala}{lst:nontermloop}{Non-Terminating program sending the evaluator into a loop}
+\begin{Code}{PureScala}{lst:nontermloop}{Example of non-terminating program}
 def bar(xs: List[BigInt]): List[BigInt] = {
   if (xs.isEmpty) Nil() else bar(Cons(xs.head, xs))
 }
 
+@symeval
 def test = {
   bar(List(1)) == Nil()
 } holds
 \end{Code}
 
-\subsubsection*{Evaluation of Terminating Programs}
+Moreover, we argue that, when ran over a program that Stainless deems terminating, the  evaluator terminates as well. In the PureScala subset that we are working with at this point in the pipeline, the only source of non-termination are calls to recursive functions.
 
-We argue that, when ran over a program that Stainless deems terminating, the  evaluator terminates as well. We note that, in the PureScala subset that we are working with at this point in the pipeline, the only source of non-termination are calls to recursive functions. A necessary condition for such a function to be terminating is that any recursive call must guarded by a conditional expression. Because the evaluator will only unfold function invocations which satisfy the function's precondition, and "productive" recursive calls, ie. 
-
-%It unfortunately appears that, when it is currently possible for the evaluator to go into an infinite loop while evaluating a program that Stainless deems to be terminating. \RefCode{lst:infloop} shows such a program. We suspect that functions preconditions are currently not being taken into account during the evaluation, because the latter relies on a fresh solver instance which has not been fed the corresponding assertions. It is not exactly clear to us how to solve this problem, although we suspect that either reusing the same solver instance that Inox has been initialised with or lifting the symbolic evaluator at Stainless's level rather than Inox (see \RefSec{sym-further}) could fix this.
+Because the evaluator will only unfold function invocations which satisfy the function's precondition, \\
 
 \begin{Code}{PureScala}{lst:infloop}{Provably terminating program}
-def foo(a: Boolean, n: BigInt): Boolean = {
-  require(n != 0)
+def sum(list: List[Int]): Int = list match {
+  case Nil() => 0
+  case Cons(x, xs) => x + sum(xs)
+}
+
+def bar(a: Boolean, n: BigInt): Boolean = {
+  require(n > 0)
 
   if (n == 0)
-    foo(a, 0)
+    foo(a, -10)
   else
     a
 }
-
-def test = {
-  foo(true, 0) == true
-} holds
 \end{Code}
+
+Regarding termination checking itself, we have ensured that the partial evaluator cannot be enabled when checking termination in Stainless, as doing so could prevent the termination checker to itself terminate, or even yield incorrect results.
 
 \subsection{Conclusion}
 
@@ -1054,7 +1061,7 @@ def test = {
 
 \subsubsection*{Nondeterministic Evaluator}
 
-The evaluator described in this chapter is \textit{deterministic}, in the sense that its evaluation function maps one expression to exactly one expression in a deterministic way. We believe that it could be worthwhile to investigate the the potential use cases of a so-called \textit{non-deterministic} evaluator. That is to say, an evaluator which, when given a single expression, would returns potentially multiple results. For example, when the evaluator would be applied to an expression \stt{$s$ = if ($c$) $t$ else $e$} whose condition $c$ it is not able to evaluate to a boolean literal, it would return all the possible expressions resulting from first evaluating the condition and both branches nondeterministically. We show some pseudo-code in \RefCode{lst:nondet}.\\
+The evaluator described in this chapter is \textit{deterministic}, in the sense that its evaluation function maps one expression to exactly one expression in a deterministic way. We believe that it could be worthwhile to investigate the potential use cases of a so-called \textit{non-deterministic} evaluator. That is to say, an evaluator which, when given a single expression, would return potentially multiple results. For example, when the evaluator would be applied to an expression \stt{$s$ = if ($c$) $t$ else $e$} whose condition $c$ it is not able to evaluate to a boolean literal, it would return all the possible expressions resulting from first evaluating the condition and both branches nondeterministically. We show some pseudo-code in \RefCode{lst:nondet}.\\
 
 One potential use case of such an evaluator that we see, when combined with a way to trigger its application in user-land code, is for implementing a symbolic \textit{partial order reduction} algorithm. In a bit more detail, the evaluator could be used to compute the set of (potentially symbolic) transitions that results from taking a step at a given (potentially symbolic) state.
 
@@ -1699,7 +1706,7 @@ It is important to note that, within this model, actor references are not guaran
 \subsection{Motivation}
 \label{sess-mot}
 
-Most systems made of components exchanging messages between them, such as Actor systems, do so by following a \textit{communication protocol}. A protocol is a set of rules which the components must follow when receiving, processing, and replying to a message. While it is possible to verify that a system correctly implements a given protocol, doing so is usually not trivial and often requires a sizeable amount of work, depending of course on the model one is working with. In the case of the Actor model we developed in \RefSec{actors}, in which messages are \textit{unityped}, verifying that a system followed some kind of protocol often required encoding a small type system within the invariants, for example to ensure that a message sent by an actor was of the right type. Moreover, we also had to check whether an actor would actually send a reply when it was expected of it. While being very interesting properties to verify, we would rather rely on the actual type system to catch these mistakes directly when writing the implementation.
+Most systems made of components exchanging messages between them, such as Actor systems, do so by following a \textit{communication protocol}. A protocol is a set of rules which the components must follow when receiving, processing, and replying to a message. While it is possible to verify that a system correctly implements a given protocol, doing so is usually not trivial and often requires a sizeable amount of work, depending of course on the model one is working with. In the case of the Actor model we developed in \RefSec{actors}, in which messages are \textit{unityped}, verifying that a system followed some kind of protocol often required encoding a small type system within the invariants, for example to ensure that a message sent by an actor was of the right type. Moreover, we also had to check whether an actor would actually send a reply when it was expected of it. While being very interesting properties to verify, we would rather rely on the actual type system to catch any mistakes directly when writing the implementation.
 
 As we have unfortunately not found a way to provide even just a typed API for our model, and do not expect to find a solution within the scope of this project, we now turn our attention to simpler, synchronous systems involving only two parties communicating over a \textit{channel} with two endpoints, one for sending messages and one for receiving them. Such a system might be an ATM and a user willing to withdraw money communicating through a screen, or a browser and a web server attempting to initialise a secure connection through a TCP socket. The protocols governing such systems that we are going to study in this chapter are called \textit{biparty communication protocols}. Such protocols have the interesting property that the description of the protocol from the viewpoint of one party is enough to deduce the protocol that must be followed from the viewpoint of the other party. The dialogue between two parties is commonly referred to as a \textit{session}.\\
 
