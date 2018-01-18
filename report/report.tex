@@ -345,7 +345,7 @@ Although this program is correct, Stainless is unfortunately unable to prove the
 insert(xs, map)
 \end{ShortCode}
 
-\item We start by substituting \stt{xs} for its value:
+\item We start by inlining the definition of \stt{xs}:
 
 \begin{ShortCode}{PureScala}
 insert(("a", x) :: ("b", y) :: Nil, map)
@@ -1373,7 +1373,7 @@ def initialInv: Boolean = {
 \subsubsection{Increment-based Replicated Counter}
 \label{repcounterinc}
 
-As a first and very simple case study, we will study an Actor system which models a replicated counter, which can only be incremented by one unit. This system is composed of two actors, a primary counter whose reference is \stt{Primary()},and a backup counter whose reference is \stt{Backup()}. Each of these reference is associated with a behavior: the primary counter reference with an instance of \stt{PrimaryB}, and the backup counter reference with an instance of \stt{BackupB}, both of which hold a positive integer, representing the value of the counter. Whenever the primary actor receives the message \stt{Inc()}, it forwards that message to the backup actor, and returns a new instance of \stt{PrimaryB} with the counter value incremented by one. When the backup actor receives the \stt{Inc()} message, it too returns a new instance of \stt{BackupB} with the counter value incremented by one. The corresponding PureScala implementation can be found in \RefCode{lst:ReplicatedCounterInc}.//
+As a first and very simple case study, we will study an Actor system which models a replicated counter, which can only be incremented by one unit. This system is composed of two actors, a primary counter whose reference is \stt{Primary()},and a backup counter whose reference is \stt{Backup()}. Each of these reference is associated with a behavior: the primary counter reference with an instance of \stt{PrimaryB}, and the backup counter reference with an instance of \stt{BackupB}, both of which hold a positive integer, representing the value of the counter. Whenever the primary actor receives the message \stt{Inc()}, it forwards that message to the backup actor, and returns a new instance of \stt{PrimaryB} with the counter value incremented by one. When the backup actor receives the \stt{Inc()} message, it too returns a new instance of \stt{BackupB} with the counter value incremented by one. The corresponding PureScala implementation can be found in \RefCode{lst:ReplicatedCounterInc}.\\
 
 We now want to verify that the following properties stay valid between at execution step: the \stt{Backup()} actor does not send itself any messages, both actors have the proper corresponding behavior, the value of the primary counter is equal to the value of the backup counter added to the number of \stt{Inc()} messages that are yet to be delivered to the backup actor. \RefCode{lst:repcounterincinv} presents the corresponding invariant, while \RefCode{lst:repcounterincthm} shows the invariant preservation theorem that we want to prove.
 
@@ -1824,7 +1824,7 @@ While there are many ways to perform such an encoding and provide a collection o
 
 \subsection{Value-Level Sessions Encoding}
 
-The \textit{lchannels} Scala library \cite{lchannels} provides a lightweight, value-level encoding of sessions which does not rely on advanced type system features. This encoding essentially corresponds to the \textit{continuation-passing-style} transformation of session types. In their library, the two endpoints (one for receiving, one for sending) of the communication channel between two parties are represented as values of the two types \stt{In} and \stt{Out}, respectively. These types are parametrised by the type of value that they accept or produce, and provide methods to send or receive such messages. \RefCode{lst:lchannels} shows a subset the API provided by the library, and \RefCode{lst:lchannels-hello} shows the encoding of the protocol we have been working with so far with this framework.
+The \textit{lchannels} Scala library \cite{lchannels} provides a lightweight, term-level encoding of sessions which does not rely on advanced type system features. This encoding essentially corresponds to the \textit{continuation-passing-style} transformation of session types. In their library, the two endpoints (one for receiving, one for sending) of the communication channel between two parties are represented as values of the two types \stt{In} and \stt{Out}, respectively. These types are parametrized by the type of value that they accept or produce, and provide methods to send or receive such messages. \RefCode{lst:lchannels} shows a subset the API provided by the library, and \RefCode{lst:lchannels-hello} shows the encoding of the protocol we have been working with so far with this framework.
 
 \begin{Code}{PureScala}{lst:lchannels}{\textit{lchannels} library interface}
 abstract class In[+A] {
@@ -1916,7 +1916,7 @@ We now describe what it means for a linear term to be \textit{consumed}: a term 
 \item The term is supplied as an argument to a constructor, eg. given \stt{case class C(x: Linear[A])}, we have $e = \stt{C(t)}$.
 \end{itemize}
 
-\textit{Note: Method calls are subsumed by the first rule, as a linear value must first be delinearized with the \stt{!}\,operator before one can call a method on the underlying value.}\\
+\textit{Note: Method calls are subsumed by the first rule, as linear terms must first be delinearized with the \stt{!}\,operator before one can call methods on the underlying values.}\\
 
 We now must ensure that no linear term is \textit{consumed} more than once. To this end, we must recursively walk down the AST, while keeping track of terms that have been consumed in a \textit{usage context}, in order to disallow subsequent uses of those terms. We will denote this context by $\Delta$. \TODO{\RefFig{fig:lintypesrules} presents the type-checking rules used to reject invalid programs.}\\
 
@@ -2006,7 +2006,36 @@ class FileHandler {
 
 \subsubsection{Higher-Order Linear Functions}
 
+\RefCode{lst:hlf} shows the syntactic sugar provided by our implementation, which allow to refer to the type a linear lambda, ie. a lambda which consumes its argument, by \InlineS{A -*> B} instead \InlineS{Linear[A] => B}. The library also provides an implicit conversion from function of \InlineS{Linear[A] => B} to a \InlineS{A -*> B}. In \RefCode{lst}, we show the definition of a linear list, along with its \stt{map} method, which accepts a linear lambda.
 
+\begin{Code}{PureSCala}{lst:hlf}{Syntactic sugar for linear lambdas}
+case class -*>[A, B](f: Linear[A] => B) {
+  def apply(x: Linear[A]): B = f(x)
+}
+
+implicit def toLin[A, B](f: Linear[A] => B): A -*> B = -*>(f)
+\end{Code}
+
+\begin{Code}{PureSCala}{lst:hlf}{Linear list}
+@linear
+sealed abstract class LList[A] {
+  def map[B](f: A -*> B): Linear[LList[B]] = this match {
+    case LNil()      => LNil[B]()
+    case LCons(h, t) => LCons(f(h), t.map(f))
+  }
+}
+
+case class LNil[A]() extends LList[A]
+case class LCons[A](head: Linear[A], tail: Linear[LList[A]]) extends LList[A]
+
+def ok(xs: Linear[LList[Int]]): Linear[LList[Int]] = {
+  xs.map((x: Linear[Int]) => x + 1)
+}
+
+def bad(xs: Linear[LList[Int]]): Linear[LList[Int]] = {
+  xs.map((x: Linear[Int]) => x + x + 1) // err: linear term `x` has already been used
+}
+\end{Code}
 
 %\begin{landscape}
 %\begin{figure}[htb]
@@ -2246,9 +2275,9 @@ def menu(card: String)(menu: Linear[Menu]): Unit = {
 
 \subsection{Further Work}
 
-\subsubsection*{Value-level Multiparty Session Types for Actor Systems}
+\subsubsection*{Term-level Multiparty Session Types for Actor Systems}
 
-We believe that it would be worth investigating the interplay between linear types, sessions types and the actor model developed in \RefSec{actors}, provided that we manage to enrich the model with a typed API. It is of course already possible to mark actor references as linear within our model, effectively requiring the holder of such a reference to send it a message. But without a typed API, it is current not possible to model a session within this framework. On top of that, more work is probably needed to properly encode the resulting so-called \textit{multiparty session types}\cite{DBLP:journals/corr/NeykovaY16} at the value level.
+We believe that it would be worth investigating the interplay between linear types, sessions types and the actor model developed in \RefSec{actors}, provided that we manage to enrich the model with a typed API. It is of course already possible to mark actor references as linear within our model, effectively requiring the holder of such a reference to send it a message. But without a typed API, it is current not possible to model a session within this framework. On top of that, more work is probably needed to properly encode the resulting so-called \textit{multiparty session types}\cite{DBLP:journals/corr/NeykovaY16} at the term level.
 
 \subsubsection*{Affine Types and Borrow Checker}
 
