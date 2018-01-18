@@ -494,7 +494,7 @@ Let's first get a couple of definitions out of the way:
 \item A \textit{path condition} is a quantifier-free formula in conjunctive normal form which encodes the knowledge about the symbolic values encountered so far that the evaluator has gathered along the way.
 \end{itemize}
 
-Combining both techniques into a single evaluation procedure, ie. a procedure which partially evaluates a program with symbolic inputs while maintaining a \textit{path condition}, has been shown to increase both performance and reasoning abilities of verifications systems in some cases \cite{partialsym}. We call such a procedure a \textit{symbolic partial evaluator}. The key benefit of this technique is that, whenever the evaluator encounters a boolean expression while evaluating a program, it can make use of the path condition to hopefully determine whether the expression is \InlineS{true} or \InlineS{false}.\\
+Combining both techniques into a single evaluation procedure, ie. a procedure which partially evaluates a program with symbolic inputs while maintaining a \textit{path condition}, has been shown to yield a much more powerful evaluator than each procedure on its own, and to increase both performance and reasoning abilities of verifications systems \cite{partialsym}. We call such a procedure a \textit{symbolic partial evaluator}. The key benefit of this technique is that, whenever the evaluator encounters a boolean expression while evaluating a program, it can make use of the path condition to hopefully determine whether the expression is \InlineS{true} or \InlineS{false}.\\
 
 \RefCode{lst:PC} shows a simple program annotated with the current path condition at various points of execution. This path condition enables the partial evaluator to reduce the whole expression to the \InlineS{else} branch of the conditional expression  because, under the path condition at step 2, the condition \InlineS{x > 0} is provably \InlineS{false}.
 
@@ -522,7 +522,7 @@ Combining both techniques into a single evaluation procedure, ie. a procedure wh
 
 \subsection{Semantics}
 
-We subsequently denote the path condition by $\Delta$, an boolean expression $e$ that  evaluates to \InlineS{true} under $\Delta$ by $e \in \Delta$. and a variable $v$ that is bound to an expression $e$ under $\Delta$ by $v \mapsto_\Delta e$. We will not delve into the details of how to decide whether a given condition is satisfiable under some path condition, but a reasonable although much too simplistic approximation would be to maintain a set of expressions and simply testing for membership. The actual implementation found in Inox (which predates our work) is much more complex and powerful implementation of this very idea. Moreover, we denote the fact that an expression $e$ evaluates to an expression $e'$ under a path condition $\Delta$ by $\lb{e}{\Delta} \longrightarrow e'$. Given $c, v$ two expressions, and \stt{x} a variable, we note $\Delta \cup c$ the addition of $c$ as a conjunct to the path condition $\Delta$, and $\Delta \uplus x \mapsto v$ the addition of the binding \stt{val x = $v$}. At last, the fact that an expression $e$ can be simplified to a boolean value under a path condition $\Delta$ is captured by $\stt{e} \Downarrow \Delta$. \RefFig{fig:symbolicsem} shows the operation semantics followed by our implementation, expressed in those terms. \\
+We subsequently denote the path condition by $\Delta$, an boolean expression $e$ that  evaluates to \InlineS{true} under $\Delta$ by $e \in \Delta$. and a variable $v$ that is bound to an expression $e$ under $\Delta$ by $v \mapsto_\Delta e$. We will not delve into the details of how to decide whether a given condition is satisfiable under some path condition, but a reasonable although much too simplistic approximation would be to maintain a set of expressions and simply testing for membership. The actual implementation found in Inox (which predates our work) is much more complex and powerful implementation of this very idea. Moreover, we denote the fact that an expression $e$ evaluates to an expression $e'$ under a path condition $\Delta$ by $\lb{e}{\Delta} \longrightarrow e'$. Given $c, v$ two expressions, and \stt{x} a variable, we note $\Delta \cup c$ the addition of $c$ as a conjunct to the path condition $\Delta$, and $\Delta \uplus x \mapsto v$ the addition of the binding \stt{val x = $v$}. At last, the fact that a function invocation $f$ can be safely unfolded under path condition $\Delta$ is captured by $\stt{f} \Downarrow \Delta$. \RefFig{fig:symbolicsem} shows the operational semantics followed by our implementation, expressed in those terms. We informally discuss the most interesting of these rules below.
 
 \subsubsection*{Evaluation of Boolean expressions}
 
@@ -550,13 +550,41 @@ When encountering a conditional expression $E = \stt{if ($c$) $t$ else $e$}$, un
 \item If $c'$ is not a literal, it evaluates both branches under their respective path conditions. We denote the result of their evaluation respectively by $t'$ and $e'$. It then returns the expression \stt{if ($c'$) $t'$ else $e'$}.
 \end{enumerate}
 
+This procedure is formalized in rules 10, 11, and 12 of \RefFig{symbolicsem}.
+
 \subsubsection*{Evaluation of pattern matches}
 
-Pattern matches are converted to an equivalent conditional expression with explicit type checks, casts, and field accesses, before being fed back to the evaluator.
+Pattern matches are converted to an equivalent conditional expression with explicit type checks, casts, and field accesses, before being fed back to the evaluator. The corresponding rule (21) can be found in \RefFig{symbolicsem}.
 
 \subsubsection*{Evaluation of function invocations}
 
+Finding good rules for the evaluation of function invocations, and more specifically recursive one, was by far the most challenging and subtle aspect of this work. Indeed, the naive approach of unfolding every function call that is encountered during evaluation send the evaluator into an infinite loop. Instead, the evaluation of a function call proceeds as follows:
 
+\begin{enumerate}
+\item The arguments are recursively evaluated.
+\item The precondition of the function is then checked against the evaluated arguments. If is is invalid, the evaluator stops there and replace the original arguments to the invocation by their counterpart computed in the step 1.
+\item If the function that is invoked is not recursive, the invocation is unfolded, and the evaluator recurses over the resulting expression.
+\item If the function is recursive, some more care is needed. Indeed, if one were to unfold every calls to a recursive function, this would often send the evaluator into an infinite loop, even when the function has been deemed terminating. To understand why, let's consider the following example:
+
+\begin{ShortCode}{PureScala}
+def fact(n: Int): Int = {
+  require(n >= 1)
+  if (n == 1) 1 else n * fact(n - 1)
+}
+
+def test(n: Int): Int = fact(n)
+\end{ShortCode}
+
+If we were to unfold \stt{fact} in function \stt{test} and continue evaluation from there, because we do not know anything about the value of \stt{n}, the evaluator would recursive into both branches of the conditional expression. In the \InlineS{else} branch, the recursive call to \stt{fact} would itself be unfolded. Because we still do not know anything about the value of \stt{n - 1}, both branches of the expression resulting from unfolding \stt{fact} once more would also be explored, and so on. This obviously send the evaluator into an infinite loop, and prevent termination of the evaluation. On the other hand, if we knew more about \stt{n}, eg. that \stt{n >= 3}, the evaluator would be able to unfold \stt{fact} a number of times already, eg. twice resulting in \stt{n * n * fact(n - 2)}.
+
+In other words, we only want to unfold an invocation to a recursive function if we can  determine, under the current path condition, whether or not a subsequent, valid recursive call will definitely be reached or not. We denote such a function invocation by $f(e_1, \ldots, e_2) \Downarrow \Delta$. We discuss the impact of this heuristic on termination in more details in \RefSec{term}.
+
+%This property is formalized in \RefFig{lst:recsafe}.
+
+\item If the function invocation cannot be productively unfolded, the evaluator stops there and replace the original arguments to the invocation by their counterpart computed in step 1.
+\end{enumerate}
+
+The corresponding rules (\ref{fig:symbolicsem:fi1}, \ref{fig:symbolicsem:fi2}, and \ref{fig:symbolicsem:fi3}) can be found in \RefFig{symbolicsem}.
 
 \begin{figure}[htb]
 \begin{framed}
@@ -836,16 +864,15 @@ Pattern matches are converted to an equivalent conditional expression with expli
 
 \begin{equation}
 \dfrac{
- \stt{id.body} \Downarrow \Delta \uplus \{\,\stt{x}_i \mapsto e_i'\,|\, 1 \leq i \leq n\,\}
- \quad
- \stt{id.params} = \langle \stt{x}_1, \ldots, \stt{x}_n \rangle
+ \stt{f.params} = \langle \stt{x}_1, \ldots, \stt{x}_n \rangle
  \quad
  \lb{e_i}{\Delta} \longrightarrow e_i',\  i \in \{1 \ldots n\}
  \quad
  \lb{\stt{f.pre($e_1',\ldots,e_n'$)}}{\Delta} \longrightarrow \stt{true}
+ \quad  \stt{f($e_1',\ldots,e_n'$)} \Downarrow \Delta
 }{
-  \lb{\stt{id}(e_1,\ldots,e_n)}{\Delta} \longrightarrow
-  \lb{\stt{id.body}[\stt{x}_1/e_1',\ldots,\stt{x}_n/e_n']}{\Delta}
+  \lb{\stt{f}(e_1,\ldots,e_n)}{\Delta} \longrightarrow
+  \lb{\stt{f.body}[\stt{x}_1/e_1',\ldots,\stt{x}_n/e_n']}{\Delta}
 }
 \label{fig:symbolicsem:fi2}
 \end{equation}
@@ -854,8 +881,8 @@ Pattern matches are converted to an equivalent conditional expression with expli
 \dfrac{
  \lb{e_i}{\Delta} \longrightarrow e_i',\, i \in \{1 \ldots n\}
 }{
-  \lb{\stt{id}(e_1,\ldots,e_n)}{\Delta} \longrightarrow
-  \stt{id}(e_1',\ldots,e_n')
+  \lb{\stt{f}(e_1,\ldots,e_n)}{\Delta} \longrightarrow
+  \stt{f}(e_1',\ldots,e_n')
 }
 \label{fig:symbolicsem:fi3}
 \end{equation}
@@ -866,16 +893,6 @@ Pattern matches are converted to an equivalent conditional expression with expli
   \lb{e_i}{\Delta} \longrightarrow e_i',\, i \in \{1 \ldots n\}
 }{
   \lb{e}{\Delta} \longrightarrow \stt{cons}(e_1', \ldots, e_n')
-}
-\end{equation}
-
-\begin{equation}
-\dfrac{
- e = \stt{if ($c$) $t_1$ else $t_2$} \quad
- \lb{c}{\Delta} \longrightarrow r \quad
- r \in \{\stt{true}, \stt{false}\}
-}{
-  \stt{e} \Downarrow \Delta
 }
 \end{equation}
 
@@ -894,7 +911,7 @@ In order to invoke the partial evaluator on a function definition, a user must s
 \subsection{Case Study: Key-value Store Algebra}
 \label{symcases}
 
-In \RefCode{lst:symkvstore}, we define a monadic domain-specific language to manipulate a key-value store, along with a tracing interpreter which maps the operations over a PureScala \stt{Map}. A simple program which makes use of this DSL to insert a list of concrete values into the store is shown in \RefCode{lst:symkvstoreinv}. Without additional lemmas, Stainless is unfortunately unable to verify the postcondition of the \stt{result} function. On the other hand, turning on the partial evaluator turns the associated verification condition into a much more concrete form, which in turns allow the verification to promptly go through. We will note that, although the exact amount of \textit{fuel} we give to the interpreter is unknown, the precondition of the \stt{result} function constrains it to be greater than 10. Because the program expressed in that DSL requires less than 10 steps to be fully interpreted, the evaluator is able to reduce it to normal form, something which would not be possible with a non-symbolic partial evaluator.
+In \RefCode{lst:symkvstore}, we define a monadic domain-specific language to manipulate a key-value store, along with a tracing interpreter which maps the operations over a PureScala \stt{Map}. A simple program which makes use of this DSL to insert a list of concrete values into the store is shown in \RefCode{lst:symkvstoreinv}. Without additional lemmas, Stainless is unfortunately unable to verify the postcondition of the \stt{result} function. On the other hand, turning on the partial evaluator turns the associated verification condition into a much more concrete form, which in turns allow the verification to promptly go through. We will note that, although the exact amount of \textit{fuel} we give to the interpreter is unknown, the precondition of the \stt{result} function constrains it to be greater than 10. Because the program expressed in that DSL requires less than 10 steps to be fully interpreted, the evaluator is able to reduce it to normal form.
 
 \begin{Code}{PureScala}{lst:kvvc}{Partially evaluated verification condition}
 val (res, trace) = (
@@ -1046,6 +1063,7 @@ def test(y: Int) = {
 \end{Code}
 
 \subsection{Termination}
+\label{term}
 
 As Stainless comes with a powerful termination checker, we suggest to only enable the partial evaluator on functions which have been proved terminating by Stainless. As an additional measure, we have bounded the maximum number of evaluation steps that can be performed. This ensure that, should one still run the evaluator on a non-termination function, Stainless will not hang or crash.\\
 
@@ -1071,7 +1089,7 @@ The understand why the second property is important, consider the program in  \R
 
 On the other hand, if we supply \stt{tricky} with a partially known list, such as in the function \stt{test2}, \stt{tricky} will still be unfolded until the function is eventually applied to the abstract list \stt{xs}.\\
 
-While this no formal argument, we believe that these conditions are sufficient to ensure the termination of the evaluation of provably terminating programs.
+While this no formal argument, we believe that these conditions are sufficient to ensure termination of evaluation of provably terminating programs.
 
 \begin{Code}{PureScala}{lst:tricky}{Tricky program to evaluate without ending up in an infinite loop}
 def tricky(n: Int, xs: List[Int]): Int = {
@@ -1761,12 +1779,12 @@ It is important to note that, within this model, actor references are not guaran
 
 Most systems made of components exchanging messages between them, such as Actor systems, do so by following a \textit{communication protocol}. A protocol is a set of rules which the components must follow when receiving, processing, and replying to a message. While it is possible to verify that a system correctly implements a given protocol, doing so is usually not trivial and often requires a sizeable amount of work, depending of course on the model one is working with. In the case of the Actor model we developed in \RefSec{actors}, in which messages are \textit{unityped}, verifying that a system followed some kind of protocol often required encoding a small type system within the invariants, for example to ensure that a message sent by an actor was of the right type. Moreover, we also had to check whether an actor would actually send a reply when it was expected of it. While being very interesting properties to verify, we would rather rely on the actual type system to catch any mistakes directly when writing the implementation.
 
-As we have unfortunately not found a way to provide even just a typed API for our model, and do not expect to find a solution within the scope of this project, we now turn our attention to simpler, synchronous systems involving only two parties communicating over a \textit{channel} with two endpoints, one for sending messages and one for receiving them. Such a system might be an ATM and a user willing to withdraw money communicating through a screen, or a browser and a web server attempting to initialise a secure connection through a TCP socket. The protocols governing such systems that we are going to study in this chapter are called \textit{biparty communication protocols}. Such protocols have the interesting property that the description of the protocol from the viewpoint of one party is enough to deduce the protocol that must be followed from the viewpoint of the other party. The dialogue between two parties is commonly referred to as a \textit{session}.\\
+As we have unfortunately not found a way to provide a typed API for our model, and do not expect to find a solution within the scope of this project, we now turn our attention to simpler, synchronous systems involving only two parties communicating over a \textit{channel} with two endpoints, one for sending messages and one for receiving them. Such a system might be an ATM and a user willing to withdraw money communicating through a screen, or a browser and a web server attempting to initialise a secure connection through a TCP socket. The protocols governing such systems that we are going to study in this chapter are called \textit{biparty communication protocols}. Such protocols have the interesting property that the description of the protocol from the viewpoint of one party is enough to deduce the protocol that must be followed from the viewpoint of the other party. The dialogue between two parties is commonly referred to as a \textit{session}.\\
 
 As a running example for the next sections, we will consider a very simple protocol involving two parties Alice and Bob, and four messages \stt{Greet}, \stt{Hello}, \stt{Bye}, and \stt{Quit}.
 From the viewpoint of Alice, the protocol is informally described as follows: Alice must send Bob either the message \stt{Quit} or \stt{Greet}. In the first case the sessions then ends, otherwise she can expect to receive either the message \stt{Bye}, ending the session, or the message \stt{Hello}, after which the session continues from the start.\\
 
-It is important to note that, for the an implementation of such protocols to be correct, assuming an underlying reliable delivery channel, each party must both send the correct message when it is expected of them, and handle all possible messages that they can expect to receive at some point. A implementation of a party which fails to do so is deemed incorrect in that framework.
+For the an implementation of such protocols to be correct, assuming an underlying reliable delivery channel, each party must both send the correct message when it is expected of them, and handle all possible messages that they can expect to receive at some point. A implementation of a party which fails to do so is deemed incorrect in that framework.
 
 \subsection{Session Types}
 
