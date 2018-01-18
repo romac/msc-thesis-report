@@ -243,8 +243,7 @@
 \title{Systems Modeling With Stainless}
 
 \date{
-%  {\small Version 0.6}\\
-  {\small (Draft)}\\
+  {\small Version 1.0}\\
   January 2018
 }
 
@@ -294,10 +293,17 @@
 
 \section{Introduction}
 
-\TODO{Introduction}
+
+
+In \RefSec{verif}, we introduce Stainless, a verification system for programs expressed in PureScala, a subset of the Scala programming language.\\
+
+\RefSec{symbolic} presents the design and implementation of a partial symbolic evaluation procedure for PureScala programs. We discuss the semantics of the evaluation procedure, as well as the challenges we faced to ensure the termination of the procedure, when it is warranted. At last, we showcase the versatile abilities of the partial symbolic evaluator by applying it in two different contexts.\\
+
+In \RefSec{actors}, we define a model for actor systems which we implement as a library for Stainless. We then explain how one would go about verifying that a global invariant of an actor system is preserved between each step of execution. We subsequently implement a few small systems using this library, and verify for each system that the appropriate invariant is indeed preserved.\\
+
+At last, in \RefSec{biparty}, we show how the addition of linear types to the type system of Stainless allows us to model bi-party communication protocols expressed as session types in PureScala, using the encoding provided by an existing Scala library, while statically enforcing some safety properties which were missing from the original library.
 
 \clearpage
-
 \section{Program Verification with Stainless}
 \label{verif}
 
@@ -313,13 +319,6 @@ It supports both purely functional and imperative programs \cite{Blanc:2013:OLV:
 
 The PureScala language, while not as expressive as Scala itself, supports a good chunk of its features, such as: recursive functions, conditional expressions, pattern matching, algebraic data types, methods, generics, first-class functions, sets, maps, mutable arrays, mutable variables, and while loops. Functions and methods can be annotated with pre- and a post-conditions, using standard Scala syntax. The verifier then extracts these specifications from the program, and attempts to automatically prove that the implementation of the program matches these specifications. It does so by generating \textit{verification conditions} from both the specifications and the implementation, which are then fed to Inox\footnote{\url{https://github.com/epfl-lara/inox}}, a powerful solver for higher-order functional programs. Inox itself relies on various \textit{Satisfiability Modulo Theories} \cite{53e486195688442995f82bfe28c55731} solvers to eventually check the validity of the given verification conditions.\\
 
-For example, given the PureScala program in \RefCode{lst:intro}, Stainless will generate two \textit{verification conditions}:
-
-\begin{itemize}
-\item One corresponding to the \textit{postcondition} of the \stt{factorial} function, namely: $\forall n.\, n \geq 0 \implies factorial(n) \geq 0$.
-\item Another one corresponding the check for the satisfiability of \stt{factorial}'s precondition at the recursive call \stt{factorial(n - 1)}, namely: $\forall n.\, n \geq 0 \wedge n \not= 0 \implies n - 1 \geq 0$.
-\end{itemize}
-
 \begin{Code}{PureScala}{lst:intro}{Factorial in PureScala}
 def factorial(n: BigInt): BigInt = {
   require(n >= 0)
@@ -331,6 +330,58 @@ def factorial(n: BigInt): BigInt = {
 } ensuring(res => res >= 0)
 \end{Code}
 
+For example, given the PureScala program in \RefCode{lst:intro}, Stainless will generate the following two verification conditions:
+
+\begin{itemize}
+\item One corresponding to the \textit{postcondition} of the \stt{factorial} function:
+\begin{ShortCode}{PureScala}
+(n >= 0 && n != 0) ==> (n - 1 >= 0)
+\end{ShortCode}
+%$\forall n.\, n \geq 0 \implies factorial(n) \geq 0$.
+\item Another one corresponding the check for the satisfiability of \stt{factorial}'s precondition at the recursive call \stt{factorial(n - 1)}:
+\begin{ShortCode}{PureScala}
+(n >= 0) ==> {
+  val res: BigInt = if (n == 0) {
+    1
+  } else {
+    n * factorial(n - 1)
+ }
+  res >= 0
+}
+\end{ShortCode}
+%$\forall n.\, n \geq 0 \wedge n \not= 0 \implies n - 1 \geq 0$.
+\end{itemize}
+
+The validity of the two VCs is checked by Inox, which then informs Stainless of the result, yielding the following output in the console:
+
+\begin{ShortCode}{PureScala}
+factorial    precond. (call factorial(n - 1))    valid    ...    0.195
+factorial    postcondition                       valid    ...    0.124  
+\end{ShortCode}
+
+Suppose we instead wrote the following incorrect implementation of the factorial function:
+
+\begin{ShortCode}{PureScala}
+def factorial(n: BigInt): BigInt = {
+  require(n >= 0)
+  if(n == 0) {
+    BigInt(1)
+  } else {
+    n * factorial(n - 2) // <- typo
+  }
+} ensuring(res => res >= 0)
+\end{ShortCode}
+
+The check for the precondition of the call to \stt{factorial} would then be invalid, and Stainless will report a counter-example:
+
+\begin{ShortCode}{PureScala}
+- Result for 'precond. (call factorial(n - 2))' VC for factorial @10:11:
+    => INVALID
+  Found counter-example:
+    n: BigInt -> 1
+\end{ShortCode}
+
+At last, if Inox is unable to prove either the validity or the invalidity of a verification condition in a (user-defined) given amount of time, Stainless will report \stt{UNKNOWN}, which often means that additional lemmas and/or more specific contracts are needed.
 
 \clearpage
 \section{Symbolic Partial Evaluation of PureScala Programs}
@@ -339,7 +390,7 @@ def factorial(n: BigInt): BigInt = {
 \subsection{Motivation}
 \label{symbolic-motivation}
 
-Let's consider the following program:
+Let's now consider the following PureScala program:
 
 \begin{Code}{PureScala}{lst:symintro}{Example program}
 def foldLeft[A, B](list: List[A], z: B)(f: (B, A) => B): B = list match {
@@ -364,7 +415,7 @@ def test(map: Map[String, Int], x: Int, y: Int): (Int, Map[String, Int]) = {
 } holds
 \end{Code}
 
-Although this program is correct, Stainless is unfortunately unable to prove the verification condition corresponding to \stt{test}'s postcondition on its own. To remedy  this problem, one could refine the program by adding contracts to the \stt{foldLeft} and \stt{insert} functions, or introduce additional lemmas. While this is a reasonable way of going at the problem, we will discuss in this chapter an alternative way of proving such programs correct. The main insight we will make use of is that, although none of the arguments to \stt{insert} are fully known within the \stt{test} function, the knowledge we have of \stt{map} from \stt{test}'s precondition combined with the known structure of \stt{xs} is enough to \textit{partially evaluate} in a \textit{symbolic} way the body of the function, yielding a much simpler expression which in turn makes the postcondition much easier to verify. Before we discuss this idea in greater details, let's look at how one would "manually" prove correct the above program:
+Although this program is correct, Stainless is unfortunately unable to prove the validity of verification condition corresponding to \stt{test}'s postcondition. To remedy  this problem, one could refine the program by adding contracts to the \stt{foldLeft} and \stt{insert} functions, or introduce additional lemmas. While this is a reasonable way of going at the problem, we will discuss in this chapter an alternative way of proving such programs correct. The main insight we will make use of is that, although none of the arguments to \stt{insert} are fully known within the \stt{test} function, the knowledge we have of \stt{map} from \stt{test}'s precondition combined with the known structure of \stt{xs} is enough to \textit{partially evaluate} in a \textit{symbolic} way the body of the function, yielding a much simpler expression which in turn makes the postcondition much easier to verify. Before we discuss this idea in greater details, let's look at how one would "manually" prove correct the above program:
 
 \begin{enumerate}
 
@@ -930,14 +981,70 @@ The corresponding rules (\ref{fig:symbolicsem:fi1}, \ref{fig:symbolicsem:fi2}, a
 \end{figure}
 \end{landscape}
 
+\subsection{Termination}
+\label{term}
+
+When the partial evaluator is invoked over a program that is not provably terminating, there are no guarantees that the evaluation procedure will terminate as well. If the program is provably non-terminating, such as the one in \RefFig{lst:nontermloop}, then the evaluator will not terminate either. Indeed, in the current state, checking for program termination using Stainless's powerful termination checker during evaluation is impractical for performance reasons. While it would certainly be possible to perform termination checking before the partial evaluator kicks in, and then only attempt to evaluate functions which have been proved terminating, we for now simply suggest to only enable partial evaluation on functions which have been proved terminating by Stainless, by running the termination checker manually, as is the recommended practice when doing verification as well. As an additional measure, we have bounded the maximum number of evaluation steps that can be performed by the evaluator. This ensure that, should one still run the evaluator on a non-termination function, Stainless will not hang or crash.\\
+
+\begin{Code}{PureScala}{lst:nontermloop}{Example of non-terminating program}
+def bar(xs: List[BigInt]): List[BigInt] = {
+  if (xs.isEmpty) Nil() else bar(Cons(xs.head, xs))
+}
+
+@partialEval
+def test = {
+  bar(List(1)) == Nil()
+} holds
+\end{Code}
+
+Moreover, we argue that, when ran over a program that Stainless deems terminating, the  evaluator terminates as well. We note that, at point in the pipeline, the only source of non-termination are calls to recursive functions. As such, because the evaluator will only unfold a function invocation when the precondition is satisfied, and when any of the following two statement is true:
+
+\begin{enumerate}[label=(\alph*)]
+\item The unfolded expression does not contain a recursive call
+\item Otherwise, it is possible to determine under the current path condition whether a recursive call will be reached or not
+\end{enumerate}
+
+The understand why the second property is important, consider the program in  \RefCode{lst:tricky}. If the evaluator only looked at the outermost conditional statement to determine whether the call to \stt{tricky} in \stt{test} could be unfolded in productive way, it would end up in an infinite loop. Indeed, because \stt{n} is greater than 0 under the path condition, the \stt{then} branch of the outermost \InlineS{if} will be selected, and evaluation will continue recursively from there. Because we don't know anything about \stt{xs}, the evaluator will then speculatively evaluate both branches of the match expression, and will thus encounter another recursive call, which it will deem worthy of unfolding because, by the same reasoning,  the outermost \InlineS{if} can be reduced to its \stt{then} branch. On the other hand, property (b) will forbid the evaluator to unfold \stt{tricky} because it is not possible to deduce, under the current path condition, whether or not the recursive call will be reached.
+
+On the other hand, if we supply \stt{tricky} with a partially known list, such as in the function \stt{test2}, \stt{tricky} will still be unfolded until the function is eventually applied to the abstract list \stt{xs}. While this no formal argument, we believe that these conditions are sufficient to ensure termination of evaluation of provably terminating programs.\\
+
+\begin{Code}{PureScala}{lst:tricky}{Program requiring some care during evaluation}
+def tricky(n: Int, xs: List[Int]): Int = {
+  if (n > 0) {
+    xs match {
+      case Nil()       => n
+      case Cons(x, xs) => x + tricky(n, xs)
+    }
+  } else {
+    0
+  }
+}
+
+@partialEval
+def test1(n: Int, xs: List[Int]) = {
+  require(n > 0)
+  tricky(n, xs) // tricky(n, xs)
+}
+
+@partialEval
+def test2(n: Int, xs: List[Int]) = {
+  require(n > 0)
+  tricky(n, Cons(1, Cons(2, Cons(3, xs)))) // 1 + (2 + (3 + trick(n, xs)))
+}
+\end{Code}
+
+Regarding termination checking itself, we have ensured that the partial evaluator cannot be enabled when checking termination in Stainless, as doing so could prevent the termination checker to itself terminate, or even yield incorrect results.
+
 \subsection{Implementation}
 
 We have implemented the symbolic partial evaluator described above within Stainless\footnote{\url{https://github.com/romac/stainless/tree/sym-partial-eval}} in about 900 lines of code, leveraging Inox to check for validity of the formulas underlying the path condition.\\
 
 In order to invoke the partial evaluator on a function definition, a user must supply the new \stt{--partial-eval} flag and annotate the function with the \stt{@partialEval} annotation. Any such function will then be partially evaluated, and its body will be substituted by the resulting expression. Enabling the \stt{partial-eval} debug section instructs Stainless to print the result of the evaluation. This effectively enable users to use Stainless as a symbolic partial evaluator for PureScala program.
 
-\subsection{Case Study: Key-value Store Algebra}
+\subsection{Case Studies}
 \label{symcases}
+
+\subsubsection{Key-Value Store Algebra}
 
 In \RefCode{lst:symkvstore}, we define a monadic domain-specific language to manipulate a key-value store, along with a tracing interpreter which maps the operations over a PureScala \stt{Map}. A simple program which makes use of this DSL to insert a list of concrete values into the store is shown in \RefCode{lst:symkvstoreinv}. Without additional lemmas, Stainless is unfortunately unable to verify the postcondition of the \stt{result} function. On the other hand, turning on the partial evaluator turns the associated verification condition into a much more concrete form, which in turns allow the verification to promptly go through. We will note that, although the exact amount of \textit{fuel} we give to the interpreter is unknown, the precondition of the \stt{result} function constrains it to be greater than 10. Because the program expressed in that DSL requires less than 10 steps to be fully interpreted, the evaluator is able to reduce it to normal form.
 
@@ -1019,7 +1126,7 @@ def interpret(op: Op)(kv: Map[String, String], trace: List[Label], fuel: BigInt)
 \end{Code}
 \end{landscape}
 
-\subsection{1st Futamura Projection}
+\subsubsection{1st Futamura Projection}
 
 Let us consider the case where one were to define a language, implement an interpreter for it in PureScala, and then write a program in this language. One could then partially evaluate the interpreter applied to the program, while keeping the inputs and I/O operations abstract. The resulting expression could then be seen as a "compiled" version of the original program, represented as a PureScala program, which can be linked to a small runtime and compiled to a lower-level language using the infrastructure provided by the Scala language itself, PureScala being a strict subset of Scala.\\
 
@@ -1089,60 +1196,6 @@ def test(y: Int) = {
   interpret(program, ctx)                 // Left(Error("Unbound variable: x"))
 } ensuring { _.isLeft }
 \end{Code}
-
-\subsection{Termination}
-\label{term}
-
-When the partial evaluator is invoked over a program that is not provably terminating, there are no guarantees that the evaluation procedure will terminate as well. If the program is provably non-terminating, such as the one in \RefFig{lst:nontermloop}, then the evaluator will not terminate either. Indeed, in the current state, checking for program termination using Stainless's powerful termination checker during evaluation is impractical for performance reasons. While it would certainly be possible to perform termination checking before the partial evaluator kicks in, and then only attempt to evaluate functions which have been proved terminating, we for now simply suggest to only enable partial evaluation on functions which have been proved terminating by Stainless, by running the termination checker manually, as is the recommended practice when doing verification as well. As an additional measure, we have bounded the maximum number of evaluation steps that can be performed by the evaluator. This ensure that, should one still run the evaluator on a non-termination function, Stainless will not hang or crash.\\
-
-\begin{Code}{PureScala}{lst:nontermloop}{Example of non-terminating program}
-def bar(xs: List[BigInt]): List[BigInt] = {
-  if (xs.isEmpty) Nil() else bar(Cons(xs.head, xs))
-}
-
-@partialEval
-def test = {
-  bar(List(1)) == Nil()
-} holds
-\end{Code}
-
-Moreover, we argue that, when ran over a program that Stainless deems terminating, the  evaluator terminates as well. We note that, at point in the pipeline, the only source of non-termination are calls to recursive functions. As such, because the evaluator will only unfold a function invocation when the precondition is satisfied, and when any of the following two statement is true:
-
-\begin{enumerate}[label=(\alph*)]
-\item The unfolded expression does not contain a recursive call
-\item Otherwise, it is possible to determine under the current path condition whether a recursive call will be reached or not
-\end{enumerate}
-
-The understand why the second property is important, consider the program in  \RefCode{lst:tricky}. If the evaluator only looked at the outermost conditional statement to determine whether the call to \stt{tricky} in \stt{test} could be unfolded in productive way, it would end up in an infinite loop. Indeed, because \stt{n} is greater than 0 under the path condition, the \stt{then} branch of the outermost \InlineS{if} will be selected, and evaluation will continue recursively from there. Because we don't know anything about \stt{xs}, the evaluator will then speculatively evaluate both branches of the match expression, and will thus encounter another recursive call, which it will deem worthy of unfolding because, by the same reasoning,  the outermost \InlineS{if} can be reduced to its \stt{then} branch. On the other hand, property (b) will forbid the evaluator to unfold \stt{tricky} because it is not possible to deduce, under the current path condition, whether or not the recursive call will be reached.
-
-On the other hand, if we supply \stt{tricky} with a partially known list, such as in the function \stt{test2}, \stt{tricky} will still be unfolded until the function is eventually applied to the abstract list \stt{xs}. While this no formal argument, we believe that these conditions are sufficient to ensure termination of evaluation of provably terminating programs.\\
-
-\begin{Code}{PureScala}{lst:tricky}{Program requiring some care during evaluation}
-def tricky(n: Int, xs: List[Int]): Int = {
-  if (n > 0) {
-    xs match {
-      case Nil()       => n
-      case Cons(x, xs) => x + tricky(n, xs)
-    }
-  } else {
-    0
-  }
-}
-
-@partialEval
-def test1(n: Int, xs: List[Int]) = {
-  require(n > 0)
-  tricky(n, xs) // tricky(n, xs)
-}
-
-@partialEval
-def test2(n: Int, xs: List[Int]) = {
-  require(n > 0)
-  tricky(n, Cons(1, Cons(2, Cons(3, xs)))) // 1 + (2 + (3 + trick(n, xs)))
-}
-\end{Code}
-
-Regarding termination checking itself, we have ensured that the partial evaluator cannot be enabled when checking termination in Stainless, as doing so could prevent the termination checker to itself terminate, or even yield incorrect results.
 
 \subsection{Conclusion}
 
@@ -1783,7 +1836,7 @@ It is important to note that, within this model, actor references are not guaran
 We initially hoped that the partial evaluator we presented in \RefSec{symbolic} would help with the verification of these systems. Unfortunately, it appears that, in practice, the evaluator does not improve the verification time (quite the contrary, actually), nor does it remove any of the burden of the proof from the programmer. This might either be because this approach is not well suited to the problem at hand, or because of some limitations of the evaluator itself, which we hope to investigate further.
 
 \clearpage
-\section{Bi-party Communication Protocols}
+\section{Bi-Party Communication Protocols}
 \label{biparty}
 
 \subsection{Motivation}
