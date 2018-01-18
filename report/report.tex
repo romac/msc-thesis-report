@@ -301,7 +301,36 @@
 \section{Program Verification with Stainless}
 \label{verif}
 
-\TODO{Describe Stainless/Inox pipeline}
+Stainless \cite{voirol2016automating} is a verification system for higher-order programs expressed in a strict subset of the Scala programming language called \textit{PureScala}\footnote{\url{https://github.com/epfl-lara/stainless/blob/master/core/src/sphinx/purescala.rst}}, derived from an earlier system called Leon \cite{Suter:2011:SMR:2041552.2041575}. In particular, Stainless can\footnote{\url{https://github.com/epfl-lara/stainless/blob/master/core/src/sphinx/intro.rst}}
+
+\begin{itemize}
+\item verify statically that a program conforms to a given specification and that it cannot crash at run-time
+\item provide useful counterexamples when an implementation does not satisfy its specification
+\item verify that a program will terminate on all inputs
+\end{itemize}
+
+It supports both purely functional and imperative programs \cite{Blanc:2013:OLV:2489837.2489838, xlang}.\\
+
+The PureScala language, while not as expressive as Scala itself, supports a good chunk of its features, such as: recursive functions, conditional expressions, pattern matching, algebraic data types, methods, generics, first-class functions, sets, maps, mutable arrays, mutable variables, and while loops. Functions and methods can be annotated with pre- and a post-conditions, using standard Scala syntax. The verifier then extracts these specifications from the program, and attempts to automatically prove that the implementation of the program matches these specifications. It does so by generating \textit{verification conditions} from both the specifications and the implementation, which are then fed to Inox\footnote{\url{https://github.com/epfl-lara/inox}}, a powerful solver for higher-order functional programs. Inox itself relies on various \textit{Satisfiability Modulo Theories} \cite{53e486195688442995f82bfe28c55731} solvers to eventually check the validity of the given verification conditions.\\
+
+For example, given the PureScala program in \RefCode{lst:intro}, Stainless will generate two \textit{verification conditions}:
+
+\begin{itemize}
+\item One corresponding to the \textit{postcondition} of the \stt{factorial} function, namely: $\forall n.\, n \geq 0 \implies factorial(n) \geq 0$.
+\item Another one corresponding the check for the satisfiability of \stt{factorial}'s precondition at the recursive call \stt{factorial(n - 1)}, namely: $\forall n.\, n \geq 0 \wedge n \not= 0 \implies n - 1 \geq 0$.
+\end{itemize}
+
+\begin{Code}{PureScala}{lst:intro}{Factorial in PureScala}
+def factorial(n: BigInt): BigInt = {
+  require(n >= 0)
+  if(n == 0) {
+    BigInt(1)
+  } else {
+    n * factorial(n - 1)
+  }
+} ensuring(res => res >= 0)
+\end{Code}
+
 
 \clearpage
 \section{Symbolic Partial Evaluation of PureScala Programs}
@@ -490,7 +519,7 @@ Let's first get a couple of definitions out of the way:
 
 \begin{itemize}
 \item \textit{Partial evaluation} \cite{Jones:1993:PEA:153676} is the process of executing a program in the presence of partial inputs, effectively specializing it  program that is more performant or easier to reason about than the initial one.
-\item \textit{Symbolic evaluation} \cite{King:1970:PV:905403} is the process of gathering knowledge about symbolic values in a program by executing it, in order to verify whether or not a given program satisfies some properties, such as the absence of divisions by zero, or the preservation of some invariant during execution \cite{DBLP:journals/corr/BaldoniCDDF16}.
+\item \textit{Symbolic evaluation} \cite{King:1970:PV:905403, King:1976:SEP:360248.360252} is the process of gathering knowledge about symbolic values in a program by executing it, in order to verify whether or not a given program satisfies some properties, such as the absence of divisions by zero, or the preservation of some invariant during execution \cite{DBLP:journals/corr/BaldoniCDDF16}.
 \item A \textit{path condition} is a quantifier-free formula in conjunctive normal form which encodes the knowledge about the symbolic values encountered so far that the evaluator has gathered along the way.
 \end{itemize}
 
@@ -522,7 +551,7 @@ Combining both techniques into a single evaluation procedure, ie. a procedure wh
 
 \subsection{Semantics}
 
-We subsequently denote the path condition by $\Delta$, an boolean expression $e$ that  evaluates to \InlineS{true} under $\Delta$ by $e \in \Delta$. and a variable $v$ that is bound to an expression $e$ under $\Delta$ by $v \mapsto_\Delta e$. We will not delve into the details of how to decide whether a given condition is satisfiable under some path condition, but a reasonable although much too simplistic approximation would be to maintain a set of expressions and simply testing for membership. The actual implementation found in Inox (which predates our work) is much more complex and powerful implementation of this very idea. Moreover, we denote the fact that an expression $e$ evaluates to an expression $e'$ under a path condition $\Delta$ by $\lb{e}{\Delta} \longrightarrow e'$. Given $c, v$ two expressions, and \stt{x} a variable, we note $\Delta \cup c$ the addition of $c$ as a conjunct to the path condition $\Delta$, and $\Delta \uplus x \mapsto v$ the addition of the binding \stt{val x = $v$}. At last, the fact that a function invocation $f$ can be safely unfolded under path condition $\Delta$ is captured by $\stt{f} \Downarrow \Delta$. \RefFig{fig:symbolicsem} shows the operational semantics followed by our implementation, expressed in those terms. We informally discuss the most interesting of these rules below.
+We subsequently denote the path condition by $\Delta$, an boolean expression $e$ that  evaluates to \InlineS{true} under $\Delta$ by $e \in \Delta$. and a variable $v$ that is bound to an expression $e$ under $\Delta$ by $v \mapsto_\Delta e$. We will not delve into the details of how to decide whether a given condition is satisfiable under some path condition, but a reasonable although much too simplistic approximation would be to maintain a set of expressions and simply testing for membership. We denote the fact that an expression $e$ evaluates to an expression $e'$ under a path condition $\Delta$ by $\lb{e}{\Delta} \longrightarrow e'$. Given $c, v$ two expressions, and \stt{x} a variable, we note $\Delta \cup c$ the addition of $c$ as a conjunct to the path condition $\Delta$, and $\Delta \uplus x \mapsto v$ the addition of the binding \stt{val x = $v$}. At last, the fact that a function invocation $f$ can be safely unfolded under path condition $\Delta$ is captured by $\stt{f} \Downarrow \Delta$. \RefFig{fig:symbolicsem} shows the operational semantics followed by our implementation, expressed in those terms. We informally discuss the most interesting of these rules below.
 
 \subsubsection*{Evaluation of Boolean expressions}
 
@@ -903,7 +932,7 @@ The corresponding rules (\ref{fig:symbolicsem:fi1}, \ref{fig:symbolicsem:fi2}, a
 
 \subsection{Implementation}
 
-We have implemented the symbolic partial evaluator described above within Stainless\footnote{\url{https://github.com/romac/stainless/tree/sym-partial-eval}} in about 900 lines of code, leveraging Inox to check for the validity of the formulas underlying the path condition.\\
+We have implemented the symbolic partial evaluator described above within Stainless\footnote{\url{https://github.com/romac/stainless/tree/sym-partial-eval}} in about 900 lines of code, leveraging Inox to check for validity of the formulas underlying the path condition.\\
 
 In order to invoke the partial evaluator on a function definition, a user must supply the new \stt{--partial-eval} flag and annotate the function with the \stt{@partialEval} annotation. Any such function will then be partially evaluated, and its body will be substituted by the resulting expression. Enabling the \stt{partial-eval} debug section instructs Stainless to print the result of the evaluation. This effectively enable users to use Stainless as a symbolic partial evaluator for PureScala program.
 
@@ -1154,7 +1183,7 @@ def ndEval(expr: Expr, pc: PC): Stream[Expr] = {
 
 \subsection{Motivation}
 
-These days, the size or the throughput of the data that a typical computational system has to deal with on a regular basis requires such systems to distribute their workload over several logical processing units, such as the several logical cores that a modern CPU provides. When that is not enough, the workload is then commonly spread out over several processing units, which most often do not share an address space as they are commonly spread in one or multiple data centers. The programs which run on these system must hence be decomposed into smaller components which can all run concurrently, and therefore be spread out over multiple cores, processors, or machines. The actor model \cite{Hewitt}, amongst others, provides a basis for such concurrent computations. It does so by breaking up a computation into isolated units called \textit{actors}, which communicate asynchronously by sending each other messages. Because actors do not share memory and rely on asynchronous message passing, they can easily be multiplexed over a set of logical processes or \textit{threads}. Moreover, because of these very same properties, the actor model is also well suited to the modeling of distributed systems, as the latter are typically composed of isolated units which do not share state with the other components and rely on asynchronous message passing to communicate together.
+These days, the size or the throughput of the data that a typical computational system has to deal with on a regular basis requires such systems to distribute their workload over several logical processing units, such as the several logical cores that a modern CPU provides. When that is not enough, the workload is then commonly spread out over several processing units, which most often do not share an address space as they are commonly spread in one or multiple data centers. The programs which run on these system must hence be decomposed into smaller components which can all run concurrently, and therefore be spread out over multiple cores, processors, or machines. The actor model \cite{Hewitt, actorlaws, Agha:1986:AMC:7929}, amongst others, provides a basis for such concurrent computations. It does so by breaking up a computation into isolated units called \textit{actors}, which communicate asynchronously by sending each other messages. Because actors do not share memory and rely on asynchronous message passing, they can easily be multiplexed over a set of logical processes or \textit{threads}. Moreover, because of these very same properties, the actor model is also well suited to the modeling of distributed systems, as the latter are typically composed of isolated units which do not share state with the other components and rely on asynchronous message passing to communicate together.
 
 \subsection{A Simple Actor Model for Verification}
 
