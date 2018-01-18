@@ -2330,7 +2330,13 @@ In the early days of this project, we implemented a very basic borrow checker wi
 \section{Conclusion}
 \label{conclusion}
 
-\TODO{Conclusion}
+With this project, we hope to have demonstrated the versatility and extensibility of the Stainless verification system by showcasing three orthogonal approaches to the modeling and verification of complex programs and systems.\\
+
+In \RefSec{symbolic} we presented the design and implementation of a partial symbolic evaluation procedure for PureScala programs, and argued with supporting examples, that this technique can enhance both the performance and the reasoning abilities of the verification system.\\
+
+In \RefSec{actors}, we defined a model for actor systems, and verified in three case studies that some appropriate invariant was preserved during the execution of the system.\\
+
+At last, in \RefSec{biparty}, we have shown how the addition of linear types to the type system of Stainless allows for a safe encoding of session types in PureScala, inspired by the design of an existing Scala library.
 
 \clearpage
 
