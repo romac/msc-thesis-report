@@ -293,15 +293,7 @@
 
 \section{Introduction}
 
-
-
-In \RefSec{verif}, we introduce Stainless, a verification system for programs expressed in PureScala, a subset of the Scala programming language.\\
-
-\RefSec{symbolic} presents the design and implementation of a partial symbolic evaluation procedure for PureScala programs. We discuss the semantics of the evaluation procedure, as well as the challenges we faced to ensure the termination of the procedure, when it is warranted. At last, we showcase the versatile abilities of the partial symbolic evaluator by applying it in two different contexts.\\
-
-In \RefSec{actors}, we define a model for actor systems which we implement as a library for Stainless. We then explain how one would go about verifying that a global invariant of an actor system is preserved between each step of execution. We subsequently implement a few small systems using this library, and verify for each system that the appropriate invariant is indeed preserved.\\
-
-At last, in \RefSec{biparty}, we show how the addition of linear types to the type system of Stainless allows us to model bi-party communication protocols expressed as session types in PureScala, using the encoding provided by an existing Scala library, while statically enforcing some safety properties which were missing from the original library.
+This project explores three orthogonal approaches to the verification of non-trivial programs, and systems of medium complexity, such as evaluators for domain specific languages, small actor systems, and implementations of bi-party communication protocols. While the techniques that we develop in this report can each stand on their own, we nonetheless briefly discuss, in each section, how a particular technique could potentially apply to one of the problem studied in another section. In \RefSec{verif}, we introduce Stainless, a verification system for programs expressed in PureScala, a subset of the Scala programming language. \RefSec{symbolic} presents the design and implementation of a partial symbolic evaluation procedure for PureScala programs. We discuss the semantics of the evaluation procedure, as well as the challenges we faced to ensure the termination of the procedure, when it is warranted. At last, we showcase the versatile abilities of the partial symbolic evaluator by applying it to non-trivial programs in two different contexts. In \RefSec{actors}, we define a model for actor systems which we implement as a library for Stainless. We then explain how one would go about verifying that a global invariant of an actor system is preserved between each step of execution. We subsequently implement a few small systems using this library, and verify for each system that the appropriate invariant is indeed preserved. At last, in \RefSec{biparty}, we show how the addition of linear types to the type system of Stainless allows us to model bi-party communication protocols expressed as session types in PureScala, using the encoding provided by an existing Scala library, while statically enforcing some safety properties which were missing from the original library.
 
 \clearpage
 \section{Program Verification with Stainless}
@@ -317,7 +309,7 @@ Stainless \cite{voirol2016automating} is a verification system for higher-order 
 
 It supports both purely functional and imperative programs \cite{Blanc:2013:OLV:2489837.2489838, xlang}.\\
 
-The PureScala language, while not as expressive as Scala itself, supports a good chunk of its features, such as: recursive functions, conditional expressions, pattern matching, algebraic data types, methods, generics, first-class functions, sets, maps, mutable arrays, mutable variables, and while loops. Functions and methods can be annotated with pre- and a post-conditions, using standard Scala syntax. The verifier then extracts these specifications from the program, and attempts to automatically prove that the implementation of the program matches these specifications. It does so by generating \textit{verification conditions} from both the specifications and the implementation, which are then fed to Inox\footnote{\url{https://github.com/epfl-lara/inox}}, a powerful solver for higher-order functional programs. Inox itself relies on various \textit{Satisfiability Modulo Theories} \cite{53e486195688442995f82bfe28c55731} solvers to eventually check the validity of the given verification conditions.\\
+The PureScala language, while not as expressive as Scala itself, supports a good chunk of its features, such as: recursive functions, conditional expressions, pattern matching, algebraic data types, methods, generics, first-class functions, sets, maps, mutable arrays, mutable variables, and while loops. Functions and methods can be annotated with pre- and a post-conditions, using standard Scala syntax. The verifier then extracts these specifications from the program, and attempts to automatically prove that the implementation of the program matches these specifications. It does so by generating \textit{verification conditions} from both the specifications and the implementation, which are then fed to Inox\footnote{\url{https://github.com/epfl-lara/inox}}, a powerful solver for higher-order functional programs. Inox itself relies on various \textit{Satisfiability Modulo Theories} \cite{53e486195688442995f82bfe28c55731} solvers to eventually check the validity of the given verification conditions.
 
 \begin{Code}{PureScala}{lst:intro}{Factorial in PureScala}
 def factorial(n: BigInt): BigInt = {
@@ -330,7 +322,9 @@ def factorial(n: BigInt): BigInt = {
 } ensuring(res => res >= 0)
 \end{Code}
 
-For example, given the PureScala program in \RefCode{lst:intro}, Stainless will generate the following two verification conditions:
+\clearpage
+
+For example, given the PureScala program in \RefCode{lst:intro}, Stainless generates the following two verification conditions:
 
 \begin{itemize}
 \item One corresponding to the \textit{postcondition} of the \stt{factorial} function:
@@ -415,7 +409,11 @@ def test(map: Map[String, Int], x: Int, y: Int): (Int, Map[String, Int]) = {
 } holds
 \end{Code}
 
-Although this program is correct, Stainless is unfortunately unable to prove the validity of verification condition corresponding to \stt{test}'s postcondition. To remedy  this problem, one could refine the program by adding contracts to the \stt{foldLeft} and \stt{insert} functions, or introduce additional lemmas. While this is a reasonable way of going at the problem, we will discuss in this chapter an alternative way of proving such programs correct. The main insight we will make use of is that, although none of the arguments to \stt{insert} are fully known within the \stt{test} function, the knowledge we have of \stt{map} from \stt{test}'s precondition combined with the known structure of \stt{xs} is enough to \textit{partially evaluate} in a \textit{symbolic} way the body of the function, yielding a much simpler expression which in turn makes the postcondition much easier to verify. Before we discuss this idea in greater details, let's look at how one would "manually" prove correct the above program:
+Although this program is correct, Stainless is unfortunately unable to prove the validity of verification condition corresponding to \stt{test}'s postcondition. To remedy  this problem, one could refine the program by adding contracts to the \stt{foldLeft} and \stt{insert} functions, or introduce additional lemmas. While this is a reasonable way of going at the problem, we will discuss in this chapter an alternative way of proving such programs correct. The main insight we will make use of is that, although none of the arguments to \stt{insert} are fully known within the \stt{test} function, the knowledge we have of \stt{map} from \stt{test}'s precondition combined with the known structure of \stt{xs} is enough to \textit{partially evaluate} in a \textit{symbolic} way the body of the function, yielding a much simpler expression which in turn makes the postcondition much easier to verify.
+
+\clearpage
+
+Before we discuss this idea in greater details, let's look at how one would "manually" prove correct the above program:
 
 \begin{enumerate}
 
@@ -471,6 +469,8 @@ val f = {
 foldLeft("b" -> y :: Nil, f(map, ("a", x)))(f)
 \end{ShortCode}
 
+\clearpage
+
 \item We now evaluate the first two arguments of the call to \stt{foldLeft}. The first one stays as is as it is already in normal form. The second argument \InlineS{f(map, ("a", x))} becomes:
 
 \begin{ShortCode}{PureScala}
@@ -522,7 +522,9 @@ foldLeft(Nil, f(map.updated("a", x), ("b", y)))(f)
 map.updated("a", x)
 \end{ShortCode}
 
-\item We are now left with this expression:
+\clearpage
+
+\item We are now left with the following expression:
 
 \begin{ShortCode}{PureScala}
 foldLeft(Nil, map.updated("a", x))(f)
@@ -1037,9 +1039,7 @@ Regarding termination checking itself, we have ensured that the partial evaluato
 
 \subsection{Implementation}
 
-We have implemented the symbolic partial evaluator described above within Stainless\footnote{\url{https://github.com/romac/stainless/tree/sym-partial-eval}} in about 900 lines of code, leveraging Inox to check for validity of the formulas underlying the path condition.\\
-
-In order to invoke the partial evaluator on a function definition, a user must supply the new \stt{--partial-eval} flag and annotate the function with the \stt{@partialEval} annotation. Any such function will then be partially evaluated, and its body will be substituted by the resulting expression. Enabling the \stt{partial-eval} debug section instructs Stainless to print the result of the evaluation. This effectively enable users to use Stainless as a symbolic partial evaluator for PureScala program.
+We have implemented the symbolic partial evaluator described above within Stainless\footnote{\url{https://github.com/romac/stainless/tree/sym-partial-eval}} in about 900 lines of code, leveraging Inox to check for validity of the formulas underlying the path condition. In order to invoke the partial evaluator on a function definition, a user must supply the new \stt{--partial-eval} flag and annotate the function with the \stt{@partialEval} annotation. Any such function will then be partially evaluated, and its body will be substituted by the resulting expression. Enabling the \stt{partial-eval} debug section instructs Stainless to print the result of the evaluation. This effectively enable users to use Stainless as a symbolic partial evaluator for PureScala program.
 
 \subsection{Case Studies}
 \label{symcases}
@@ -1088,7 +1088,7 @@ def prop(res: Option[String], trace: List[Label]) = {
 }
 \end{Code}
 
-\begin{landscape}
+
 \begin{Code}{PureScala}{lst:symkvstore}{Key-value store implementation}
 sealed abstract class Label
 object Label {
@@ -1105,7 +1105,7 @@ def get(key: String)(next: Option[String] => Op): Op    = Get(key, next)
 def put(key: String, value: String)(next: () => Op): Op = Put(key, value, next)
 def pure(value: Option[String]): Op                     = Pure(value)
 
-def interpret(op: Op)(kv: Map[String, String], trace: List[Label], fuel: BigInt): (Option[String], List[Label]) = {
+def interpret(op: Op)(kv: Map[String, String], trace: List[Label], fuel: BigInt) = {
   require(fuel >= 0)
   decreases(fuel)
 
@@ -1114,17 +1114,24 @@ def interpret(op: Op)(kv: Map[String, String], trace: List[Label], fuel: BigInt)
       (value, trace)
 
     case Get(key, next) if fuel > 0 =>
-      interpret(next(kv.get(key)))(kv, Label.Get(key) :: trace, fuel - 1)
+      interpret(next(kv.get(key)))(
+        kv,
+        Label.Get(key) :: trace,
+        fuel - 1
+    )
 
     case Put(key, value, next) if fuel > 0 =>
-      interpret(next())(kv.updated(key, value), Label.Put(key, value) :: trace, fuel - 1)
+      interpret(next())(
+      	kv.updated(key, value),
+        Label.Put(key, value) :: trace,
+        fuel - 1
+     )
 
     case _ =>
       (None(), trace)
   }
 }
 \end{Code}
-\end{landscape}
 
 \subsubsection{1st Futamura Projection}
 
@@ -1213,7 +1220,7 @@ We have presented, formalized and implemented a symbolic partial evaluator for P
 
 The evaluator described in this chapter is \textit{deterministic}, in the sense that its evaluation function maps one expression to exactly one expression in a deterministic way. We believe that it could be worthwhile to investigate the potential use cases of a so-called \textit{non-deterministic} evaluator. That is to say, an evaluator which, when given a single expression, would return potentially multiple results. For example, when the evaluator would be applied to an expression \stt{$s$ = if ($c$) $t$ else $e$} whose condition $c$ it is not able to evaluate to a boolean literal, it would return all the possible expressions resulting from first evaluating the condition and both branches nondeterministically. We show some pseudo-code in \RefCode{lst:nondet}.\\
 
-One potential use case of such an evaluator that we see, when combined with a way to trigger its application in user-land code, is for implementing a symbolic \textit{partial order reduction} algorithm. In a bit more detail, the evaluator could be used to compute the set of (potentially symbolic) transitions that results from taking a step at a given (potentially symbolic) state.
+One potential use case that we see for such an evaluator, is the user-land implementation of a symbolic \textit{dynamic partial order reduction} algorithm for transition-based systems, such as actor systems. Indeed, our hope is that such an evaluator could be used to compute the set of concrete transitions that would result from taking a step at a some partially symbolic state.
 
 \begin{Code}{PureScala}{lst:nondet}{Pseudo-code of a non-deterministic evaluator}
 def ndEval(expr: Expr, pc: PC): Stream[Expr] = {
@@ -1242,6 +1249,8 @@ These days, the size or the throughput of the data that a typical computational 
 
 Our model is loosely based on the modern definition of object-based actor systems \cite{algebraicactors}, and attempts to provide an idiomatic Scala API in the style of the Akka actor library. In this framework, each actor is addressed by a \textit{reference}, through which other actors can asynchronously send messages. Each actor has an associated \textit{behavior}, which holds the state of the actor, if any, and determines a) the operations which will be performed upon receiving a message, and b) what is the next \textit{behavior} to associate with its reference. A \textit{behavior} can thus be seen as a data type holding some immutable values representing the state, and a method which takes in a message, performs some computation which might involve sending messages to other actors, and finally returns a new behavior. State at the actor level is thus effectively handled in a functional way, by returning a new behavior which holds the updated state.
 An \textit{actor system} maintains a collection of one-way channels (\textit{inboxes}) between any two actors in the system. An \textit{inbox} is an ordered list of messages awaiting delivery, the head of the list being the next message to deliver. The system drives the execution by non-deterministically picking a non-empty inbox, taking the first message of the list, and invoking the message handler of the behavior associated with the destination reference. It then collects the messages to send, and appends them to the appropriate inboxes, and update the destination actor's behavior with the behavior returned by the message handler.
+
+\clearpage
 
 \subsection{Implementation}
 \label{actor-impl}
@@ -1295,9 +1304,7 @@ case class ActorContext(
 A behavior specifies both the current state of an actor, and how this one should 
 process the next incoming message. In our framework, these are modeled as a subclass 
 of the abstract class \InlineS{Behavior}, which defines a single abstract method 
-\InlineS{processMsg}, to be overridden for each defined behavior.
-
-Using the provided \InlineS{ActorContext}, the implementation of the \InlineS{processMsg}
+\InlineS{processMsg}, to be overridden for each defined behavior. Using the provided \InlineS{ActorContext}, the implementation of the \InlineS{processMsg}
 method can both access its own reference, and register messages to be sent after the
 execution of the method is complete. It is also required to return a new \InlineS{Behavior}
 
@@ -1335,11 +1342,11 @@ def step(from: ActorRef, to: ActorRef): ActorSystem
 
 \subsubsection*{Akka}
 
-Another notable difference between our model and Akka\footnote{\url{https://doc.akka.io/docs/akka/current/general/message-delivery-reliability.html}}, is that we rely on \textit{exactly-once} delivery of messages. We experimented with a weaker model that only relied on \textit{at-most-once} delivery but it quickly became clear that the amount of work needed to verify the very same systems we describe below would be too much in the context of this project.
+A notable difference between our model and Akka\footnote{\url{https://doc.akka.io/docs/akka/current/general/message-delivery-reliability.html}}, is that we rely on \textit{exactly-once} delivery of messages. We experimented with a weaker model that only relied on \textit{at-most-once} delivery but it quickly became clear that the amount of work needed to verify the very same systems we describe below would be too much in the context of this project.
 
 \subsubsection*{Akka Typed}
 
-While we initially set to mimic the API offered by the Akka Typed library\footnote{\url{https://doc.akka.io/docs/akka/2.5.4/scala/typed.html}}, we quickly ran into some limitations of Stainless's type system. Namely, the lack of an encoding for both existential types, and various issues with the encoding of co-/contravariant class hierarchies. While some of those issues got fixed over the last few months, we have been unable to provide a typed API similar in spirit to Akka Typed. For lack of time, we have decided to go with the untyped API described in \RefSec{actor-impl}.
+While we initially set to mimic the API offered by the Akka Typed library\footnote{\url{https://doc.akka.io/docs/akka/2.5.4/scala/typed.html}}, we quickly ran into some limitations of Stainless's type system. Namely, the lack of an encoding for both existential types, and various issues with the encoding of co-/contravariant class hierarchies. While some of those issues got fixed over the last few months, we have so far been unable to provide a typed API similar in spirit to Akka Typed, and have thus settled on a somewhat weakly typed API.
 
 %\subsection{Operational Semantics}
 %\label{semantics}
@@ -1676,10 +1683,10 @@ def invariant(s: ActorSystem): Boolean = {
 %
 %\TODO{KV store}
 
+\clearpage
+
 \subsection{Spawning Actors}
 \label{spawn}
-
-\subsubsection{Updating The Model}
 
 Up until now, our framework has only been able to model Actor systems with a static topology, ie. systems where no new actors besides the ones that are statically defined can be spawned. Let's now attempt to enrich our model to account for dynamic topologies.
 
@@ -2167,7 +2174,7 @@ class OutChan[A] {
 }
 \end{Code}
 
-\subsection{Case Study: ATM}
+\subsection{Case Study}
 
 Let's consider a protocol involving an ATM and its user, which we informally describe below:
 
@@ -2181,7 +2188,7 @@ Let's consider a protocol involving an ATM and its user, which we informally des
 \item If the authentication fails, the ATM notifies the user of the failure, and the process is aborted.
 \end{enumerate}
 
-\RefCode{lst:atm_desc} shows the encoding of such a specification using the library described in \RefSec{sessions_lib}. \RefCode{lst:atm_impl} shows the corresponding valid implementation. At last, \RefCode{lst:atmmistake} shows an incorrect implementation of the protocol that would still verify without the linearity checker. We discuss the three use cases below:
+\RefCode{lst:atm_desc} shows the encoding of such a specification using the library described in \RefSec{sessions_lib}, while \RefCode{lst:atm_impl} shows the corresponding valid implementation. At last, \RefCode{lst:atmmistake} shows an incorrect implementation of the protocol that would still verify without the linearity checker. We discuss the three use cases below:
 
 \begin{enumerate}
 \item If we provide an empty body for the \stt{atm} function, we would then be greeted with the following error:
@@ -2330,12 +2337,9 @@ In the early days of this project, we implemented a very basic borrow checker wi
 \section{Conclusion}
 \label{conclusion}
 
-With this project, we hope to have demonstrated the versatility and extensibility of the Stainless verification system by showcasing three orthogonal approaches to the modeling and verification of complex programs and systems.\\
-
-In \RefSec{symbolic} we presented the design and implementation of a partial symbolic evaluation procedure for PureScala programs, and argued with supporting examples, that this technique can enhance both the performance and the reasoning abilities of the verification system.\\
-
-In \RefSec{actors}, we defined a model for actor systems, and verified in three case studies that some appropriate invariant was preserved during the execution of the system.\\
-
+With this project, we hope to have demonstrated the versatility and extensibility of the Stainless verification system by showcasing three orthogonal approaches to the modeling and verification of non-trivial programs and systems.
+In \RefSec{symbolic} we presented the design and implementation of a partial symbolic evaluation procedure for PureScala programs, and argued with supporting examples, that this technique can enhance both the performance and the reasoning abilities of the verification system.
+In \RefSec{actors}, we defined a model for actor systems, and verified in three case studies that some appropriate invariant was preserved during the execution of the system.
 At last, in \RefSec{biparty}, we have shown how the addition of linear types to the type system of Stainless allows for a safe encoding of session types in PureScala, inspired by the design of an existing Scala library.
 
 \clearpage
