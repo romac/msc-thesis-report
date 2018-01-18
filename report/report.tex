@@ -1133,7 +1133,7 @@ The evaluator described in this chapter is \textit{deterministic}, in the sense 
 
 One potential use case of such an evaluator that we see, when combined with a way to trigger its application in user-land code, is for implementing a symbolic \textit{partial order reduction} algorithm. In a bit more detail, the evaluator could be used to compute the set of (potentially symbolic) transitions that results from taking a step at a given (potentially symbolic) state.
 
-\begin{Code}{PureScala}{lst:nondet}{Pseudo-code of a non-deterministc evaluator}
+\begin{Code}{PureScala}{lst:nondet}{Pseudo-code of a non-deterministic evaluator}
 def ndEval(expr: Expr, pc: PC): Stream[Expr] = {
  case IfExpr(c, t, e) =>
   for {
@@ -1154,13 +1154,17 @@ def ndEval(expr: Expr, pc: PC): Stream[Expr] = {
 
 \subsection{Motivation}
 
-Over the last few decades, many different models of concurrent computation have been discovered, such as \textit{Petri Nets}, \textit{Communicating Sequential Processes} and the \textit{$\pi$-calculus} \cite{algebraicactors}. 
+%Over the last few decades, many different models of concurrent computation have been discovered, such as \textit{Petri Nets}, \textit{Communicating Sequential Processes} and the \textit{$\pi$-calculus} \cite{algebraicactors}.
 
-Moreover, because actors do not share memory and rely on asynchronous message passing, the Actor Model is well suited to model distributed systems as well.
+Over the last several years, the amount of data 
+
+The Actor model \cite{Hewitt} is an alternative 
+
+Moreover, because actors do not share memory and rely on asynchronous message passing, the Actor model is well suited to the modeling of distributed systems as well.
 
 \subsection{A Simple Actor Model for Verification}
 
-\subsubsection{Introduction}
+Our model is loosely based on the modern definition of object-based actor systems \cite{algebraicactors}, and attempts to provide an idiomatic Scala API in the style of the Akka actor library. In this framework, each actor is addressed by an \textit{reference}, through which other actors can asynchronously send messages. 
 
 \subsubsection{Implementation}
 \label{actor-impl}
@@ -1770,15 +1774,15 @@ It is important to note that, within this model, actor references are not guaran
 %\TODO{Conclusion}
 
 \clearpage
-\section{Biparty Communication Protocols}
+\section{Bi-party Communication Protocols}
 \label{biparty}
 
 \subsection{Motivation}
 \label{sess-mot}
 
-Most systems made of components exchanging messages between them, such as Actor systems, do so by following a \textit{communication protocol}. A protocol is a set of rules which the components must follow when receiving, processing, and replying to a message. While it is possible to verify that a system correctly implements a given protocol, doing so is usually not trivial and often requires a sizeable amount of work, depending of course on the model one is working with. In the case of the Actor model we developed in \RefSec{actors}, in which messages are \textit{unityped}, verifying that a system followed some kind of protocol often required encoding a small type system within the invariants, for example to ensure that a message sent by an actor was of the right type. Moreover, we also had to check whether an actor would actually send a reply when it was expected of it. While being very interesting properties to verify, we would rather rely on the actual type system to catch any mistakes directly when writing the implementation.
+Most systems made of components exchanging messages between them, such as Actor systems, do so by following a \textit{communication protocol}. A protocol is a set of rules which the components must follow when receiving, processing, and replying to a message. While it is possible to verify that a system correctly implements a given protocol, doing so is usually not trivial and often requires a sizable amount of work, depending of course on the model one is working with. In the case of the Actor model we developed in \RefSec{actors}, in which messages are \textit{unityped}, verifying that a system followed some kind of protocol often required encoding a small type system within the invariants, for example to ensure that a message sent by an actor was of the right type. Moreover, we also had to check whether an actor would actually send a reply when it was expected of it. While being very interesting properties to verify, we would rather rely on the actual type system to catch any mistakes directly when writing the implementation.
 
-As we have unfortunately not found a way to provide a typed API for our model, and do not expect to find a solution within the scope of this project, we now turn our attention to simpler, synchronous systems involving only two parties communicating over a \textit{channel} with two endpoints, one for sending messages and one for receiving them. Such a system might be an ATM and a user willing to withdraw money communicating through a screen, or a browser and a web server attempting to initialise a secure connection through a TCP socket. The protocols governing such systems that we are going to study in this chapter are called \textit{biparty communication protocols}. Such protocols have the interesting property that the description of the protocol from the viewpoint of one party is enough to deduce the protocol that must be followed from the viewpoint of the other party. The dialogue between two parties is commonly referred to as a \textit{session}.\\
+As we have unfortunately not found a way to provide a typed API for our model, and do not expect to find a solution within the scope of this project, we now turn our attention to simpler, synchronous systems involving only two parties communicating over a \textit{channel} with two endpoints, one for sending messages and one for receiving them. Such a system might be an ATM and a user willing to withdraw money communicating through a screen, or a browser and a web server attempting to initialize a secure connection through a TCP socket. The protocols governing such systems that we are going to study in this chapter are called \textit{bi-party communication protocols}. Such protocols have the interesting property that the description of the protocol from the viewpoint of one party is enough to deduce the protocol that must be followed from the viewpoint of the other party. The dialogue between two parties is commonly referred to as a \textit{session}.\\
 
 As a running example for the next sections, we will consider a very simple protocol involving two parties Alice and Bob, and four messages \stt{Greet}, \stt{Hello}, \stt{Bye}, and \stt{Quit}.
 From the viewpoint of Alice, the protocol is informally described as follows: Alice must send Bob either the message \stt{Quit} or \stt{Greet}. In the first case the sessions then ends, otherwise she can expect to receive either the message \stt{Bye}, ending the session, or the message \stt{Hello}, after which the session continues from the start.\\
@@ -1839,9 +1843,9 @@ Although session types were originally meant to be implemented as a separate syn
 
 While there are many ways to perform such an encoding and provide a collection of combinators to build values of such types while enforcing the associated safety properties, the existing approaches \cite{st_lin_haskell, Jespersen:2015:STR:2808098.2808100} either rely on more expressive type systems than the one provided by Stainless, eg. \textit{substructural type systems} or ones which provide \textit{path families}, \textit{higher-kinded types} and \textit{indexed monads}, or \textit{path-dependent types}. In the next section we look at a solution to this problem which only require minimal and orthogonal modifications to Stainless's type system.
 
-\subsection{Value-Level Sessions Encoding}
+\subsection{Term-Level Sessions Encoding}
 
-The \textit{lchannels} Scala library \cite{lchannels} provides a lightweight, term-level encoding of sessions which does not rely on advanced type system features. This encoding essentially corresponds to the \textit{continuation-passing-style} transformation of session types. In their library, the two endpoints (one for receiving, one for sending) of the communication channel between two parties are represented as values of the two types \stt{In} and \stt{Out}, respectively. These types are parametrized by the type of value that they accept or produce, and provide methods to send or receive such messages. \RefCode{lst:lchannels} shows a subset the API provided by the library, and \RefCode{lst:lchannels-hello} shows the encoding of the protocol we have been working with so far with this framework.
+The \textit{lchannels} Scala library \cite{lchannels} provides a lightweight, term-level encoding of sessions which does not rely on advanced type system features. This encoding essentially corresponds to the \textit{continuation-passing-style} transformation of session types. In their library, the two endpoints (one for receiving, one for sending) of the communication channel between two parties are represented as values of the two types \stt{In} and \stt{Out}, respectively. These types are parametrized by the type of value that they accept or produce, and provide methods to send or receive such messages. \RefCode{lst:lchannels} shows a subset the API provided by the library, and \RefCode{lst:lchannels-hello} shows the value-level encoding of the protocol we have been working with so far with this framework, following the encoding described in section 7.3 of \textit{Lightweight Session Programming in Scala} \cite{lchannels}. Of note is the fact that instead of having the dual type of the protocol computed statically at the type level, this property is enforced by the \stt{!!} methods on the \stt{Out} type, which effectively flips around the type of the channel, by forcing the consumer of the channel to make use of the returned channel, which has the dual type of the original, provided that the reference to the original channel cannot be re-used.
 
 \begin{Code}{PureScala}{lst:lchannels}{\textit{lchannels} library interface}
 abstract class In[+A] {
@@ -1878,13 +1882,13 @@ abstract class Out[-A] {
 \end{Code}
 
 \begin{Code}{PureScala}{lst:lchannels-hello}{\textit{lchannels} implementation of a simple protocol}
-abstract class AliceBob
+sealed abstract class AliceBob
 case class Quit()                     extends AliceBob
 case class Greet(cont: Out[Response]) extends AliceBob
 
-abstract class Response
+sealed abstract class Response
 case class Hello(cont: Out[AliceBob]) extends Response
-case class Bye()                      extends Response\
+case class Bye()                      extends Response
 \end{Code}
 
 \subsection{Linear Types in Stainless}
@@ -2284,7 +2288,7 @@ def menu(card: String)(menu: Linear[Menu]): Unit = {
 
 \subsection{Conclusion}
 
-\TODO{Conclusion}
+In this section, we have presented and implemented a linear type system for PureScala, and put it to use in a term-level implementation of sessions types based on the \stt{lchannels} library. This allowed to us ensure a safe usage of the library, effectively preventing a user from incorrectly implementing a bi-party communication protocol on top of a PureScala implementation of this library. Moreover, we have shown that no runtime errors resulting from the repeated use of linear channel can arise within that framework. Our implementation of the library is fully compatible with the original one, and can easily be swapped for the latter and then compiled using the standard Scala infrastructure, provided that one links the resulting program with the Stainless standard library.
 
 \subsection{Further Work}
 
