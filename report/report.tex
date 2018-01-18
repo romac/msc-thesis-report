@@ -701,6 +701,16 @@ The corresponding rules (\ref{fig:symbolicsem:fi1}, \ref{fig:symbolicsem:fi2}, a
 }
 \end{equation}
 
+\end{framed}
+\vspace{-10pt}
+\caption{Operational semantics of the symbolic partial evaluator \label{fig:symbolicsem}}
+\end{figure}
+
+\begin{figure}[htb]\ContinuedFloat
+\centering
+%\begin{adjustwidth}{-1mm}{-1cm}
+\begin{framed}
+
 \begin{equation}
 \dfrac{
   \lb{p}{\Delta} \longrightarrow \stt{true} \qquad
@@ -728,17 +738,6 @@ The corresponding rules (\ref{fig:symbolicsem:fi1}, \ref{fig:symbolicsem:fi2}, a
   \stt{assume($p'$); $e'$}
 }
 \end{equation}
-
-\end{framed}
-\vspace{-10pt}
-\caption{Operational semantics of the symbolic partial evaluator \label{fig:symbolicsem}}
-\end{figure}
-
-\begin{figure}[htb]\ContinuedFloat
-\centering
-%\begin{adjustwidth}{-1mm}{-1cm}
-\begin{framed}
-
 
 \begin{equation}
 \dfrac{
@@ -1065,7 +1064,7 @@ def test(y: Int) = {
 \subsection{Termination}
 \label{term}
 
-As Stainless comes with a powerful termination checker, we suggest to only enable the partial evaluator on functions which have been proved terminating by Stainless. As an additional measure, we have bounded the maximum number of evaluation steps that can be performed. This ensure that, should one still run the evaluator on a non-termination function, Stainless will not hang or crash.\\
+When the partial evaluator is invoked over a program that is not provably terminating, there are no guarantees that the evaluation procedure will terminate as well. If the program is provably non-terminating, such as the one in \RefFig{lst:nontermloop}, then the evaluator will not terminate either. Indeed, in the current state, checking for program termination using Stainless's powerful termination checker during evaluation is impractical for performance reasons. While it would certainly be possible to perform termination checking before the partial evaluator kicks in, and then only attempt to evaluate functions which have been proved terminating, we for now simply suggest to only enable partial evaluation on functions which have been proved terminating by Stainless, by running the termination checker manually, as is the recommended practice when doing verification as well. As an additional measure, we have bounded the maximum number of evaluation steps that can be performed by the evaluator. This ensure that, should one still run the evaluator on a non-termination function, Stainless will not hang or crash.\\
 
 \begin{Code}{PureScala}{lst:nontermloop}{Example of non-terminating program}
 def bar(xs: List[BigInt]): List[BigInt] = {
@@ -1087,11 +1086,9 @@ Moreover, we argue that, when ran over a program that Stainless deems terminatin
 
 The understand why the second property is important, consider the program in  \RefCode{lst:tricky}. If the evaluator only looked at the outermost conditional statement to determine whether the call to \stt{tricky} in \stt{test} could be unfolded in productive way, it would end up in an infinite loop. Indeed, because \stt{n} is greater than 0 under the path condition, the \stt{then} branch of the outermost \InlineS{if} will be selected, and evaluation will continue recursively from there. Because we don't know anything about \stt{xs}, the evaluator will then speculatively evaluate both branches of the match expression, and will thus encounter another recursive call, which it will deem worthy of unfolding because, by the same reasoning,  the outermost \InlineS{if} can be reduced to its \stt{then} branch. On the other hand, property (b) will forbid the evaluator to unfold \stt{tricky} because it is not possible to deduce, under the current path condition, whether or not the recursive call will be reached.
 
-On the other hand, if we supply \stt{tricky} with a partially known list, such as in the function \stt{test2}, \stt{tricky} will still be unfolded until the function is eventually applied to the abstract list \stt{xs}.\\
+On the other hand, if we supply \stt{tricky} with a partially known list, such as in the function \stt{test2}, \stt{tricky} will still be unfolded until the function is eventually applied to the abstract list \stt{xs}. While this no formal argument, we believe that these conditions are sufficient to ensure termination of evaluation of provably terminating programs.\\
 
-While this no formal argument, we believe that these conditions are sufficient to ensure termination of evaluation of provably terminating programs.
-
-\begin{Code}{PureScala}{lst:tricky}{Tricky program to evaluate without ending up in an infinite loop}
+\begin{Code}{PureScala}{lst:tricky}{Program requiring some care during evaluation}
 def tricky(n: Int, xs: List[Int]): Int = {
   if (n > 0) {
     xs match {
@@ -1139,12 +1136,14 @@ One potential use case of such an evaluator that we see, when combined with a wa
 \begin{Code}{PureScala}{lst:nondet}{Pseudo-code of a non-deterministc evaluator}
 def ndEval(expr: Expr, pc: PC): Stream[Expr] = {
  case IfExpr(c, t, e) =>
+  for {
+    c  <- ndEval(c, pc)
+    ts  = ndEval(t, pc withCond c)
+    es  = ndEval(e, pc withCond not(c))
+  } yield if (c == true) ts else if(c == false) es else (ts ++ es)
 
-ndEval(e, pc) == for {
-  cs <- eval(c, pc)
-  ts = eval(t, pc withCond c)
-  es = eval(e, pc withCond not(c))
-} yield ts ++ es
+  /* ... */
+}
 \end{Code}
 
 %------------------------------------------------------------------------
