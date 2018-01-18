@@ -6,7 +6,7 @@
   series = {AGERE 2015},
   year = {2015}
 }
-0
+
 @inproceedings{verdi,
  author = {Wilcox, James R. and Woos, Doug and Panchekha, Pavel and Tatlock, Zachary and Wang, Xi and Ernst, Michael D. and Anderson, Thomas},
  title = {Verdi: A Framework for Implementing and Formally Verifying Distributed Systems},
@@ -68,7 +68,17 @@ url="https://doi.org/10.1007/978-3-540-39993-3_4"
  keywords = {actor programming, fault tolerance, type checking},
 } 
 
-@inproceedings{Haller:2016:LLA:2983990.2984042,
+@book{Agha:1986:AMC:7929,
+ author = {Agha, Gul},
+ title = {Actors: A Model of Concurrent Computation in Distributed Systems},
+ year = {1986},
+ isbn = {0-262-01092-5},
+ publisher = {MIT Press},
+ address = {Cambridge, MA, USA},
+}
+
+
+inproceedings{Haller:2016:LLA:2983990.2984042,
  author = {Haller, Philipp and Loiko, Alex},
  title = {LaCasa: Lightweight Affinity and Object Capabilities in Scala},
  booktitle = {Proceedings of the 2016 ACM SIGPLAN International Conference on Object-Oriented Programming, Systems, Languages, and Applications},
@@ -85,7 +95,7 @@ url="https://doi.org/10.1007/978-3-540-39993-3_4"
  address = {New York, NY, USA},
 }
 
-@ARTICLE{2017arXiv170403093H,
+ARTICLE{2017arXiv170403093H,
    author = {{Haller}, P. and {Sommar}, F.},
     title = "{Towards an Empirical Study of Affine Types for Isolated Actors in Scala}",
   journal = {ArXiv e-prints},
@@ -97,15 +107,6 @@ archivePrefix = "arXiv",
     month = apr,
    adsurl = {http://adsabs.harvard.edu/abs/2017arXiv170403093H},
   adsnote = {Provided by the SAO/NASA Astrophysics Data System}
-}
-
-@book{Agha:1986:AMC:7929,
- author = {Agha, Gul},
- title = {Actors: A Model of Concurrent Computation in Distributed Systems},
- year = {1986},
- isbn = {0-262-01092-5},
- publisher = {MIT Press},
- address = {Cambridge, MA, USA},
 }
 
 @article{DBLP:journals/corr/NeykovaY16,
@@ -331,6 +332,27 @@ techreport{crdtsudy,
  keywords = {satisfiability, verification},
 } 
 
+@phdthesis{xlang,
+  title={{Verification by Reduction to Functional Programs}},
+  author={Blanc, R{\'e}gis},
+  year={2017},
+  organization={EPFL}
+}
+
+@misc{genc1,
+  author={Antognini, Marco},
+  title={{From Verified Functions to Safe C Code}},
+  howpublished={\url{https://github.com/mantognini/GenC}},
+  year={2016}
+}
+
+@misc{genc2,
+  author={Antognini, Marco},
+  title={{Extending Safe C Support In Leon}},
+  howpublished={\url{https://github.com/mantognini/GenC}},
+  year={2017}
+}
+
 @techreport{voirol2016automating,
   title={Automating verification of functional programs with quantified invariants},
   author={Voirol, Nicolas and Kuncak, Viktor},
@@ -405,4 +427,22 @@ abstract="Partial evaluation is a program specialization technique that allows t
 isbn="978-3-642-17071-3",
 doi="10.1007/978-3-642-17071-3_7",
 url="https://doi.org/10.1007/978-3-642-17071-3_7"
+}
+
+@book{Jones:1993:PEA:153676,
+ author = {Jones, Neil D. and Gomard, Carsten K. and Sestoft, Peter},
+ title = {Partial Evaluation and Automatic Program Generation},
+ year = {1993},
+ isbn = {0-13-020249-5},
+ publisher = {Prentice-Hall, Inc.},
+ address = {Upper Saddle River, NJ, USA},
+} 
+
+@phdthesis{King:1970:PV:905403,
+ author = {King, James Cornelius},
+ title = {A Program Verifier},
+ year = {1970},
+ note = {AAI7018026},
+ publisher = {Carnegie Mellon University},
+ address = {Pittsburgh, PA, USA},
 }
