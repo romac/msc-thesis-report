@@ -335,7 +335,7 @@ def test(map: Map[String, Int], x: Int, y: Int): (Int, Map[String, Int]) = {
 } holds
 \end{Code}
 
-Although this program is correct, Stainless is unfortunately unable to prove the verification condition corresponding to \stt{test}'s postcondition on its own. To remedy to this problem, one could refine the program by adding contracts to the \stt{foldLeft} and \stt{insert} functions, or introduce additional lemmas. While this is a reasonable way of going at the problem, we will discuss in this chapter an alternative way of proving such programs correct. The main insight we will make use of is that, although none of the arguments to \stt{insert} are fully known within the \stt{test} function, the knowledge we have of \stt{map} from \stt{test}'s precondition combined with the known structure of \stt{xs} is enough to \textit{partially evaluate} in a \textit{symbolic} way the body of the function, yielding a much simpler expression which in turn makes the postcondition much easier to verify. Before we discuss this idea in greater details, let's look at how one would "manually" prove correct the above program:
+Although this program is correct, Stainless is unfortunately unable to prove the verification condition corresponding to \stt{test}'s postcondition on its own. To remedy  this problem, one could refine the program by adding contracts to the \stt{foldLeft} and \stt{insert} functions, or introduce additional lemmas. While this is a reasonable way of going at the problem, we will discuss in this chapter an alternative way of proving such programs correct. The main insight we will make use of is that, although none of the arguments to \stt{insert} are fully known within the \stt{test} function, the knowledge we have of \stt{map} from \stt{test}'s precondition combined with the known structure of \stt{xs} is enough to \textit{partially evaluate} in a \textit{symbolic} way the body of the function, yielding a much simpler expression which in turn makes the postcondition much easier to verify. Before we discuss this idea in greater details, let's look at how one would "manually" prove correct the above program:
 
 \begin{enumerate}
 
@@ -478,7 +478,7 @@ def test(map: Map[String, Int], x: Int, y: Int): (Int, Map[String, Int]) = {
 
 \item This expression cannot be reduced further, as \stt{map} is abstract and \stt{updated} is a special language construct which can only be evaluated when applied to a concrete, finite map.
 
-\item If one knows the semantics of \stt{Map}, it becomes fairly obvious that the postcondition is valid, for any initial value of \stt{map}, \stt{x} and \stt{y}.
+\item If one knows the semantics of \stt{Map}, it becomes fairly obvious that the postcondition is valid, for any initial value of \stt{map}, \stt{x}, and \stt{y}.
 
 \end{enumerate}
 
@@ -1154,26 +1154,21 @@ def ndEval(expr: Expr, pc: PC): Stream[Expr] = {
 
 \subsection{Motivation}
 
-%Over the last few decades, many different models of concurrent computation have been discovered, such as \textit{Petri Nets}, \textit{Communicating Sequential Processes} and the \textit{$\pi$-calculus} \cite{algebraicactors}.
-
-Over the last several years, the amount of data 
-
-The Actor model \cite{Hewitt} is an alternative 
-
-Moreover, because actors do not share memory and rely on asynchronous message passing, the Actor model is well suited to the modeling of distributed systems as well.
+These days, the size or the throughput of the data that a typical computational system has to deal with on a regular basis requires such systems to distribute their workload over several logical processing units, such as the several logical cores that a modern CPU provides. When that is not enough, the workload is then commonly spread out over several processing units, which most often do not share an address space as they are commonly spread in one or multiple data centers. The programs which run on these system must hence be decomposed into smaller components which can all run concurrently, and therefore be spread out over multiple cores, processors, or machines. The actor model \cite{Hewitt}, amongst others, provides a basis for such concurrent computations. It does so by breaking up a computation into isolated units called \textit{actors}, which communicate asynchronously by sending each other messages. Because actors do not share memory and rely on asynchronous message passing, they can easily be multiplexed over a set of logical processes or \textit{threads}. Moreover, because of these very same properties, the actor model is also well suited to the modeling of distributed systems, as the latter are typically composed of isolated units which do not share state with the other components and rely on asynchronous message passing to communicate together.
 
 \subsection{A Simple Actor Model for Verification}
 
-Our model is loosely based on the modern definition of object-based actor systems \cite{algebraicactors}, and attempts to provide an idiomatic Scala API in the style of the Akka actor library. In this framework, each actor is addressed by an \textit{reference}, through which other actors can asynchronously send messages. 
+Our model is loosely based on the modern definition of object-based actor systems \cite{algebraicactors}, and attempts to provide an idiomatic Scala API in the style of the Akka actor library. In this framework, each actor is addressed by a \textit{reference}, through which other actors can asynchronously send messages. Each actor has an associated \textit{behavior}, which holds the state of the actor, if any, and determines a) the operations which will be performed upon receiving a message, and b) what is the next \textit{behavior} to associate with its reference. A \textit{behavior} can thus be seen as a data type holding some immutable values representing the state, and a method which takes in a message, performs some computation which might involve sending messages to other actors, and finally returns a new behavior. State at the actor level is thus effectively handled in a functional way, by returning a new behavior which holds the updated state.
+An \textit{actor system} maintains a collection of one-way channels (\textit{inboxes}) between any two actors in the system. An \textit{inbox} is an ordered list of messages awaiting delivery, the head of the list being the next message to deliver. The system drives the execution by non-deterministically picking a non-empty inbox, taking the first message of the list, and invoking the message handler of the behavior associated with the destination reference. It then collects the messages to send, and appends them to the appropriate inboxes, and update the destination actor's behavior with the behavior returned by the message handler.
 
-\subsubsection{Implementation}
+\subsection{Implementation}
 \label{actor-impl}
 
-We now below the PureScala implementation of the model 
+We have implemented the actor model described in the previous section as a PureScala library, which we detail below.
 
 \subsubsection*{Message}
 
-In our framework, messages are modelled as constructors of the \InlineS{Msg} abstract class.
+In our framework, messages are modeled as constructors of the \InlineS{Msg} abstract class.
 
 \begin{ShortCode}{PureScala}
 abstract class Msg
@@ -1183,7 +1178,7 @@ case class Hello(name: String) extends Msg
 \vspace{-15pt}
 \subsubsection*{Actor Reference}
 
-Each actor is associated with a unique and persistent reference, modelled as an instance of the \ActorRef abstract class.
+Each actor is associated with a persistent reference, modeled as constructors of the \ActorRef abstract class.
 
 \begin{ShortCode}{PureScala}
 abstract class ActorRef
@@ -1216,9 +1211,9 @@ case class ActorContext(
 \subsubsection*{Behavior}
 
 A behavior specifies both the current state of an actor, and how this one should 
-process the next incoming message. In our framework, these are modelled as a subclass 
+process the next incoming message. In our framework, these are modeled as a subclass 
 of the abstract class \InlineS{Behavior}, which defines a single abstract method 
-\InlineS{processMsg}, to be overriden for each defined behavior.
+\InlineS{processMsg}, to be overridden for each defined behavior.
 
 Using the provided \InlineS{ActorContext}, the implementation of the \InlineS{processMsg}
 method can both access its own reference, and register messages to be sent after the
@@ -1233,7 +1228,7 @@ abstract class Behavior {
 \vspace{-15pt}
 \subsubsection*{Actor System}
 
-The state of the Actor system at a given point in time is modelled as a case class, 
+The state of the Actor system at a given point in time is modeled as a case class, 
 holding the behavior associated with each actor reference, and the list of in-flight messages between any two actors.
 
 \begin{ShortCode}{PureScala}
@@ -1254,116 +1249,121 @@ def step(from: ActorRef, to: ActorRef): ActorSystem
 \end{ShortCode}
 
 \subsubsection{Comparison with Akka and Akka Typed}
+\label{comp}
 
 \subsubsection*{Akka}
 
-Akka is a powerful Scala implementation of the Actor model, suitable for both concurrent and distributed systems. 
+Another notable difference between our model and Akka\footnote{\url{https://doc.akka.io/docs/akka/current/general/message-delivery-reliability.html}}, is that we rely on \textit{exactly-once} delivery of messages. We experimented with a weaker model that only relied on \textit{at-most-once} delivery but it quickly became clear that the amount of work needed to verify the very same systems we describe below would be too much in the context of this project.
 
 \subsubsection*{Akka Typed}
 
-\subsubsection*{Notable Differences}
+While we initially set to mimic the API offered by the Akka Typed library\footnote{\url{https://doc.akka.io/docs/akka/2.5.4/scala/typed.html}}, we quickly ran into some limitations of Stainless's type system. Namely, the lack of an encoding for both existential types, and various issues with the encoding of co-/contravariant class hierarchies. While some of those issues got fixed over the last few months, we have been unable to provide a typed API similar in spirit to Akka Typed. For lack of time, we have decided to go with the untyped API described in \RefSec{actor-impl}.
 
-While we initially set to mimic the API offered by the Akka Typed library\footnote{\url{https://doc.akka.io/docs/akka/2.5.4/scala/typed.html}}, we quickly ran into some limitations of Stainless's type system. Namely, the lack of an encoding for both existential types, and various issues with the encoding of co-/contravariant class hierarchies. While some of those issues got fixed over the last few months, we have been unable to provide a typed API similar in spirit to Akka Typed. For lack of time, we have decided to go with the untyped API described in \RefSec{actor-impl}.\\
-
-Another notable difference between our model and both the one implemented in Akka\footnote{\url{https://doc.akka.io/docs/akka/current/general/message-delivery-reliability.html}}, is that we rely on \textit{exactly-once} delivery of messages. We experimented with a weaker model that only relied on \textit{at-most-once} delivery but it quickly became clear that the amount of work needed to verify the very same systems we describe below would be too much in the context of this project.
-
-% (archive: \url{http://archive.is/XU8if})}
-
-\subsection{Operational Semantics}
-\label{semantics}
-
-We formulate the small-step operational semantics of our Actor model in 
-\RefFig{fig:opsem}, where $s: \stt{ActorSystem}$ is an Actor system,
-$m: \stt{Msg}$ is a message,
-$n, n_{to}, n_{from}: \stt{ActorRef}$ are references,
-$b, b': \stt{Behavior}$ are behaviors,
-$ps: \stt{List[Packet]}$ a list of packets to send,
+%\subsection{Operational Semantics}
+%\label{semantics}
+%
+%We formulate the small-step operational semantics of our actor model in 
+%\RefFig{fig:opsem}, where $s: \stt{ActorSystem}$ is an Actor system,
+%$m: \stt{Msg}$ is a message,
+%$n, n_{to}, n_{from}: \stt{ActorRef}$ are references,
+%$b, b': \stt{Behavior}$ are behaviors,
+%$ps: \stt{List[Packet]}$ a list of packets to send,
 % $t: \stt{Transition}$ is a transition,
-$c: \stt{ActorContext}$ is a context,
-and $\emptyset_n: \stt{ActorContext}$ is the empty context for an actor whose
-self-reference is $n$, defined as $\emptyset_n := \stt{ActorContext}(n, \stt{Nil})$.
+%$c: \stt{ActorContext}$ is a context,
+%and $\emptyset_n: \stt{ActorContext}$ is the empty context for an actor whose
+%self-reference is $n$, defined as $\emptyset_n := \stt{ActorContext}(n, \stt{Nil})$.
 
-\begin{figure}[!h]
-\begin{framed}
- 
-\begin{equation}
-\dfrac{
-  \not\exists m \in \stt{$s$.inboxes}(n_{from}, n_{to})
-}{
-  \stt{$s$.step}(n_{from}, n_{to}) \leadsto \stt{s}
-}
-\tag{STEP-NOMSG}
-\end{equation}
-
-\vspace{10pt}
-\begin{equation}
-\dfrac{
-  \exists m \in \stt{$s$.inboxes}(n_{from}, n_{to}) \qquad
-  \stt{$s$.deliverMsg}(n_{to}, n_{from}, m) \leadsto (b, ps, t)
-}{
-  \stt{$s$.step}(n_{from}, n_{to}) \leadsto s \uplus (n_{to} \mapsto b, \ldots, t)
-}
-\tag{STEP}
-\end{equation}
-
-\vspace{10pt}
-\begin{equation}
-\dfrac{
-  \stt{$s$.behaviors($n_{to}$).processMsg}(m, \emptyset_{n_{to}}) \leadsto (b, c) 
-}{
-  \stt{$s$.deliverMsg}(n_{to}, n_{from}, m) \leadsto (b, \stt{$c$.toSend}, t)
-}
-\tag{DELIVER-MSG}
-\end{equation}
-
-\vspace{10pt}
-\begin{equation}
-\dfrac{
-  \stt{$b$.processMsg}(m, \emptyset_{n_{to}}) = i_1 ::\, \ldots ::\,i_n ::\, b' ::\,\stt{Nil} \qquad
-  \langle i_1 ::\, \ldots ::\,i_n ::\,\stt{Nil}, \emptyset_{n_{to}} \rangle \longrightarrow c
-}{
-   \stt{$b$.processMsg}(m, \emptyset_{n_{to}}) \leadsto (b', c)
-}
-\tag{PROCESS-MSG}
-\end{equation}
-
-\vspace{10pt}
-\begin{equation}
-\dfrac{\empty}{
-   \langle \stt{Nil}, c \rangle \longrightarrow c
-}
-\tag{I-NIL}
-\end{equation}
-
-\vspace{10pt}
-\begin{equation}
-\dfrac{
-  \langle i, c \rangle \longrightarrow c'
-}{
-  \langle \stt{$i ::\,is$}, c \rangle \Rightarrow \langle is, c' \rangle
-}
-\tag{I-CONS}
-\end{equation}
-
-\vspace{10pt}
-\begin{equation}
-\dfrac{
-  \empty
-}{
-  \langle n\ \stt{!}\ m, c \rangle \longrightarrow (b',\ \stt{$c$.copy(toSend $\mapsto$ ($n$, $m$) $::$ $c$.toSend)})
-}
-\tag{I-SEND}
-\end{equation}
-
-\end{framed}
-\vspace{-10pt}
-\caption{Operational semantics\label{fig:opsem}}
-\end{figure}
+%\begin{figure}[!h]
+%\begin{framed}
+% 
+%\begin{equation}
+%\dfrac{
+%  \not\exists m \in \stt{$s$.inboxes}(n_{from}, n_{to})
+%}{
+%  \stt{$s$.step}(n_{from}, n_{to}) \leadsto \stt{s}
+%}
+%\tag{STEP-NOMSG}
+%\end{equation}
+%
+%\vspace{10pt}
+%\begin{equation}
+%\dfrac{
+%  \exists m \in \stt{$s$.inboxes}(n_{from}, n_{to}) \qquad
+%  \stt{$s$.deliverMsg}(n_{to}, n_{from}, m) \leadsto (b, ps, t)
+%}{
+%  \stt{$s$.step}(n_{from}, n_{to}) \leadsto s \uplus (n_{to} \mapsto b, \ldots, t)
+%}
+%\tag{STEP}
+%\end{equation}
+%
+%\vspace{10pt}
+%\begin{equation}
+%\dfrac{
+%  \stt{$s$.behaviors($n_{to}$).processMsg}(m, \emptyset_{n_{to}}) \leadsto (b, c) 
+%}{
+%  \stt{$s$.deliverMsg}(n_{to}, n_{from}, m) \leadsto (b, \stt{$c$.toSend}, t)
+%}
+%\tag{DELIVER-MSG}
+%\end{equation}
+%
+%\vspace{10pt}
+%\begin{equation}
+%\dfrac{
+%  \stt{$b$.processMsg}(m, \emptyset_{n_{to}}) = i_1 ::\, \ldots ::\,i_n ::\, b' ::\,\stt{Nil} \qquad
+%  \langle i_1 ::\, \ldots ::\,i_n ::\,\stt{Nil}, \emptyset_{n_{to}} \rangle \longrightarrow c
+%}{
+%   \stt{$b$.processMsg}(m, \emptyset_{n_{to}}) \leadsto (b', c)
+%}
+%\tag{PROCESS-MSG}
+%\end{equation}
+%
+%\vspace{10pt}
+%\begin{equation}
+%\dfrac{\empty}{
+%   \langle \stt{Nil}, c \rangle \longrightarrow c
+%}
+%\tag{I-NIL}
+%\end{equation}
+%
+%\vspace{10pt}
+%\begin{equation}
+%\dfrac{
+%  \langle i, c \rangle \longrightarrow c'
+%}{
+%  \langle \stt{$i ::\,is$}, c \rangle \Rightarrow \langle is, c' \rangle
+%}
+%\tag{I-CONS}
+%\end{equation}
+%
+%\vspace{10pt}
+%\begin{equation}
+%\dfrac{
+%  \empty
+%}{
+%  \langle n\ \stt{!}\ m, c \rangle \longrightarrow (b',\ \stt{$c$.copy(toSend $\mapsto$ ($n$, $m$) $::$ $c$.toSend)})
+%}
+%\tag{I-SEND}
+%\end{equation}
+%
+%\vspace{10pt}
+%\begin{equation}
+%\dfrac{
+%  \empty
+%}{
+%  \langle \stt{$c$.spawn(b, id)}, c \rangle \longrightarrow (b',\ \stt{$c$.copy(toSend $\mapsto$ ($n$, $m$) $::$ $c$.toSend)})
+%}
+%\tag{I-SPAWN}
+%\end{equation}
+%
+%\end{framed}
+%\vspace{-10pt}
+%\caption{Operational semantics\label{fig:opsem}}
+%\end{figure}
 
 \subsection{Proving Invariants}
 \label{invariants}
 
-After having defined an Actor system with our framework, one might want to verify that this system preserves some invariant between each step of its execution. That is to say, for an \InlineS{ActorSystem} $s$, any two \ActorRef $n, m$, and an invariant \InlineS{inv: ActorSystem $\ \to\ $ Boolean}, if $\texttt{inv}(s)$ holds, then $\texttt{inv}(s\texttt{.step}(n, m))$ should hold as well. We express this property more formally in \RefFig{fig:stepinvariant}. Because we are essentially doing a proof by induction over execution steps here, one needs also to ensure the invariant holds for some initial system. These two properties can be easily expressed in PureScala, as shown in \RefCode{lst:preserveInv}.
+After having defined an Actor system with our framework, one might want to verify that this system preserves some invariant between each step of its execution. That is to say, for an \InlineS{ActorSystem} $s$, any two \ActorRef $n, m$, and an invariant \InlineS{inv: ActorSystem $\ \to\ $ Boolean}, if $\texttt{inv}(s)$ holds, then $\texttt{inv}(s\texttt{.step}(n, m))$ should hold as well. We express this property more formally in \RefFig{fig:stepinvariant}. We note that, because we are essentially doing a proof by induction over execution steps here, one needs also to ensure the invariant holds for some initial system. These two properties can be easily expressed in PureScala, as shown in \RefCode{lst:preserveInv}. 
 
 \begin{figure}[!h]
 $$\forall s: \stt{ActorSystem},\, n: \stt{ActorRef},\, m: \stt{ActorRef}.\ \stt{inv($s$)} \implies \stt{inv($s$.step($n, m$))}$$
@@ -1499,92 +1499,92 @@ def invariant(s: ActorSystem): Boolean = {
 }
 \end{Code}
 
-\subsubsection{Lock Service}
-
-\RefCode{lst:LockService} shows the implementation of a lock service using our framework. In this case study, an actor acts as a server holding a lock on some resource, while a number of other actors (the "agents") act as clients of the lock service, each potentially trying to acquire the lock on the resource. To model a variable number of actors with the same implementation, we define their reference as a case class parametrized by a \TODO{unique} identifier.
-
-An obvious property we might want to prove is that, at any time, at most one of those agents thinks that it holds the lock. Additionally, we'd like to ensure that such an agent is actually the same one that the server granted the lock too. We express this property in \RefCode{lst:LockServiceInv}.
-
-\begin{Code}{PureScala}{lst:LockService}{Lock service implementation}
-case class Server() extends ActorRef
-object Server {
-  case class Lock(agent: ActorRef) extends Msg
-  case class Unlock(agent: ActorRef) extends Msg
-}
-
-case class Agent(id: Int) extends ActorRef
-object Agent {
-  case object Lock   extends Msg
-  case object Unlock extends Msg
-  case object Grant  extends Msg
-}
-
-// The head of `agents` holds the lock, the tail are waiting for the lock
-case class ServerB(agents: List[ActorRef]) extends Behavior {
-  def processMsg(msg: Msg)(implicit ctx: ActorContext): Behavior = msg match {
-    case Server.Lock(agent) if agents.isEmpty =>
-      agent ! Agent.Grant
-      ServerB(List(agent))
-
-    case Server.Lock(agent) =>
-      ServerB(agents :+ agent)
-
-    case Server.Unlock(agent) if agents.nonEmpty =>
-      val newAgents = agents.tail
-      if (newAgents.nonEmpty) newAgents.head ! Agent.Grant
-      ServerB(newAgents)
-
-    case _ =>
-      Behavior.same
-  }
-}
-
-case class AgentB(holdsLock: Boolean) extends Behavior {
-  def processMsg(msg: Msg)(implicit ctx: ActorContext): Behavior = msg match {
-    case Agent.Lock =>
-      Server() ! Server.Lock(ctx.self)
-      Behavior.same
-
-    case Agent.Unlock if holdsLock =>
-      Server() ! Server.Unlock(ctx.self)
-      AgentB(false)
-
-    case Agent.Grant =>
-      AgentB(true)
-
-    case _ =>
-      Behavior.same
-  }
-}
-\end{Code}
-
-\begin{Code}{PureScala}{lst:LockServiceInv}{Lock service invariant}
-def hasLock(s: ActorSystem, a: ActorRef): Boolean = {
-  s.behaviors(a) match {
-    case AgentB(hasLock) => hasLock
-    case _ => false
-  }
-}
-
-def mutex(s: ActorSystem): Boolean = forall { (a: ActorRef, b: ActorRef) =>
-  (a != b) ==> !(hasLock(s, a) && hasLock(s, b))
-}
-
-def hasLockThenHead(s: ActorSystem): Boolean = forall { (ref: ActorRef) =>
-  hasLock(s, ref) ==> {
-    s.behaviors(Server()) match {
-      case ServerB(Cons(head, _)) => head == ref
-      case _ => false
-    }
-  }
-}
-
-def invariant(s: ActorSystem): Boolean = {
-  mutex(s) && hasLockThenHead(s)
-}
-\end{Code}
-
-\TODO{Lock service invariant proof}
+%\subsubsection{Lock Service}
+%
+%\RefCode{lst:LockService} shows the implementation of a lock service using our framework. In this case study, an actor acts as a server holding a lock on some resource, while a number of other actors (the "agents") act as clients of the lock service, each potentially trying to acquire the lock on the resource. To model a variable number of actors with the same implementation, we define their reference as a case class parametrized by a an identifier.
+%
+%An obvious property we might want to prove is that, at any time, at most one of those agents thinks that it holds the lock. Additionally, we'd like to ensure that such an agent is actually the same one that the server granted the lock too. We express this property in \RefCode{lst:LockServiceInv}.
+%
+%\begin{Code}{PureScala}{lst:LockService}{Lock service implementation}
+%case class Server() extends ActorRef
+%object Server {
+%  case class Lock(agent: ActorRef) extends Msg
+%  case class Unlock(agent: ActorRef) extends Msg
+%}
+%
+%case class Agent(id: Int) extends ActorRef
+%object Agent {
+%  case object Lock   extends Msg
+%  case object Unlock extends Msg
+%  case object Grant  extends Msg
+%}
+%
+%// The head of `agents` holds the lock, the tail are waiting for the lock
+%case class ServerB(agents: List[ActorRef]) extends Behavior {
+%  def processMsg(msg: Msg)(implicit ctx: ActorContext): Behavior = msg match {
+%    case Server.Lock(agent) if agents.isEmpty =>
+%      agent ! Agent.Grant
+%      ServerB(List(agent))
+%
+%    case Server.Lock(agent) =>
+%      ServerB(agents :+ agent)
+%
+%    case Server.Unlock(agent) if agents.nonEmpty =>
+%      val newAgents = agents.tail
+%      if (newAgents.nonEmpty) newAgents.head ! Agent.Grant
+%      ServerB(newAgents)
+%
+%    case _ =>
+%      Behavior.same
+%  }
+%}
+%
+%case class AgentB(holdsLock: Boolean) extends Behavior {
+%  def processMsg(msg: Msg)(implicit ctx: ActorContext): Behavior = msg match {
+%    case Agent.Lock =>
+%      Server() ! Server.Lock(ctx.self)
+%      Behavior.same
+%
+%    case Agent.Unlock if holdsLock =>
+%      Server() ! Server.Unlock(ctx.self)
+%      AgentB(false)
+%
+%    case Agent.Grant =>
+%      AgentB(true)
+%
+%    case _ =>
+%      Behavior.same
+%  }
+%}
+%\end{Code}
+%
+%\begin{Code}{PureScala}{lst:LockServiceInv}{Lock service invariant}
+%def hasLock(s: ActorSystem, a: ActorRef): Boolean = {
+%  s.behaviors(a) match {
+%    case AgentB(hasLock) => hasLock
+%    case _ => false
+%  }
+%}
+%
+%def mutex(s: ActorSystem): Boolean = forall { (a: ActorRef, b: ActorRef) =>
+%  (a != b) ==> !(hasLock(s, a) && hasLock(s, b))
+%}
+%
+%def hasLockThenHead(s: ActorSystem): Boolean = forall { (ref: ActorRef) =>
+%  hasLock(s, ref) ==> {
+%    s.behaviors(Server()) match {
+%      case ServerB(Cons(head, _)) => head == ref
+%      case _ => false
+%    }
+%  }
+%}
+%
+%def invariant(s: ActorSystem): Boolean = {
+%  mutex(s) && hasLockThenHead(s)
+%}
+%\end{Code}
+%
+%\TODO{Lock service invariant proof}
 
 %\subsubsection*{Leader Election}
 %
@@ -1636,7 +1636,7 @@ behaviors of the actors to be spawned, and provides a \stt{spawn} method which i
 
 \subsubsection{Case Study}
 
-\RefCode{lst:spawncode} defines a simple system with a dynamic topology, where one actor named \stt{Primary} waits for a \stt{Spawn} message to spawn a child actor, and change its behavior from \stt{BeforeB} to \stt{AfterB} in order to keep track of the reference to the child. The invariant we would to verify holds here, states that, if the \stt{Primary} actor has behavior \stt{BeforeB()}, then the behavior associated with the \ActorRef of its child actor must be \stt{Stopped}. On the other hand, if the \stt{Primary} actor has behavior \stt{AfterB(child)}, then the behavior associated with \stt{child} must be \stt{ChildB}. This test case verifies promptly, provided that the partial evaluator is enabled.
+\RefCode{lst:spawncode} defines a simple system with a dynamic topology, where one actor named \stt{Primary} waits for a \stt{Spawn} message to spawn a child actor, and change its behavior from \stt{BeforeB} to \stt{AfterB} in order to keep track of the reference to the child. The invariant we would to verify holds here, states that, if the \stt{Primary} actor has behavior \stt{BeforeB()}, then the behavior associated with the \ActorRef of its child actor must be \stt{Stopped}. On the other hand, if the \stt{Primary} actor has behavior \stt{AfterB(child)}, then the behavior associated with \stt{child} must be \stt{ChildB}.
 
 \begin{Code}{PureScala}{lst:spawncode}{}
 case object Primary extends ActorRef("primary")
@@ -1733,45 +1733,25 @@ def main(args: Array[String]): Unit = {
 
 \subsection{Conclusion}
 
-\TODO{Conclusion}
+In this section, we have presented a simple model for actor systems implemented as a PureScala library, and modeled a few simple systems with it. For each of these systems, we specified a global invariant which we subsequently proved was valid for some initial state and was preserved between each evaluation step. We have also shown how to run these systems on top of a Akka, a world-class actor implementation, thanks to a very shallow shim.
 
 \subsection{Further Work}
 
 \subsubsection*{Real-world Case Study}
 
+Admittedly, the systems we have modeled so far with this framework are quite small, and their complexity is far removed from that of a real-world system. While we have tried to verify more complex systems, we have not, in the time imparted to this project, been able to successfully prove the preservation of any interesting invariant. We do not believe that our model is fundamentally unadapted to bigger systems, but rather that more time would need to be allocated to such an endeavor. By contrast, the Verdi Coq framework, which is similar in spirit to our framework, has been successfully used to verify the entirety of a Coq implementation of the Raft consensus algorithm \cite{verdi}.
+
 \subsubsection*{Weaker Guarantees On Message Delivery}
+
+As we mentioned in \RefSec{comp}, our current model effectively implements and rely on \textit{exactly-once} message delivery. Although such a guarantee is provided by real-world actor systems such as Akka when used as a basis for concurrency, it is not realistic to expect of a real-world distributed system implementation to rely on this same guarantee. We thus believe that the guarantees provided by our model ought to be somewhat weakened in order to be better suited to the modeling of distributed systems.
 
 \subsubsection*{Name Uniqueness}
 
-It is important to note that, within this model, actor references are not guaranteed to be unique as a user could spawn two actors with the same name. \TODO{++}
+It is important to note that, within this model, actor references are not guaranteed to be unique as a user could spawn two actors with the same name. It is therefore up to the user to ensure that no two spawned actors have the same name. To palliate to this problem, a possible solution would be to have the system maintain a counter specific to each actors, which would then be both stored in child references, and subsequently incremented, in the style of the Actario Coq framework \cite{actario}.
 
-\subsection{Reasoning About Traces}
+\subsubsection*{Integration with Partial Evaluator}
 
-\TODO{Traces}
-
-%\clearpage
-%\section{Verification of Conflict-Free Replicated Data Types}
-%\label{crdt}
-%
-%\textbf{\textcolor{Red}{Will only be included if time allows}}
-%
-%\subsection{Motivation}
-%
-%Because both faults and network partitions are a common occurrence in distributed systems, these often make use of data replication in order to improve reliability \TODO{citation}, which itself can lead to  consistency issues. One increasingly popular way to mitigate this problem is to model the replicated data using \textit{Conflict-free Replicated Data Types} (CRDTs) \cite{crdt} \cite{crdtstudy}. These data types come in two flavours: \textit{Commutative Replicated Data Types} (CmRDTs, or \textit{Op-based CRDTs}) and \textit{Commutative Replicated Data Types} (CvRDTs, or \textit{State-based CDRTs}).
-%
-%\TODO{Explain eventual consistency + both models + choice of CvRDTs}
-%
-%\subsection{Verifying CRDTs Implementations}
-%
-%\subsubsection{GCounter}
-%\subsubsection{PNCounter}
-%\subsubsection{GSet}
-%\subsubsection{TwoPSet}
-%\subsubsection{ORSet}
-%
-%\subsection{Conclusion}
-%
-%\TODO{Conclusion}
+We initially hoped that the partial evaluator we presented in \RefSec{symbolic} would help with the verification of these systems. Unfortunately, it appears that, in practice, the evaluator does not improve the verification time (quite the contrary, actually), nor does it remove any of the burden of the proof from the programmer. This might either be because this approach is not well suited to the problem at hand, or because of some limitations of the evaluator itself, which we hope to investigate further.
 
 \clearpage
 \section{Bi-party Communication Protocols}
@@ -1780,7 +1760,7 @@ It is important to note that, within this model, actor references are not guaran
 \subsection{Motivation}
 \label{sess-mot}
 
-Most systems made of components exchanging messages between them, such as Actor systems, do so by following a \textit{communication protocol}. A protocol is a set of rules which the components must follow when receiving, processing, and replying to a message. While it is possible to verify that a system correctly implements a given protocol, doing so is usually not trivial and often requires a sizable amount of work, depending of course on the model one is working with. In the case of the Actor model we developed in \RefSec{actors}, in which messages are \textit{unityped}, verifying that a system followed some kind of protocol often required encoding a small type system within the invariants, for example to ensure that a message sent by an actor was of the right type. Moreover, we also had to check whether an actor would actually send a reply when it was expected of it. While being very interesting properties to verify, we would rather rely on the actual type system to catch any mistakes directly when writing the implementation.
+Most systems made of components exchanging messages between them, such as Actor systems, do so by following a \textit{communication protocol}. A protocol is a set of rules which the components must follow when receiving, processing, and replying to a message. While it is possible to verify that a system correctly implements a given protocol, doing so is usually not trivial and often requires a sizable amount of work, depending of course on the model one is working with. In the case of the actor model we developed in \RefSec{actors}, in which messages are \textit{unityped}, verifying that a system followed some kind of protocol often required encoding a small type system within the invariants, for example to ensure that a message sent by an actor was of the right type. Moreover, we also had to check whether an actor would actually send a reply when it was expected of it. While being very interesting properties to verify, we would rather rely on the actual type system to catch any mistakes directly when writing the implementation.
 
 As we have unfortunately not found a way to provide a typed API for our model, and do not expect to find a solution within the scope of this project, we now turn our attention to simpler, synchronous systems involving only two parties communicating over a \textit{channel} with two endpoints, one for sending messages and one for receiving them. Such a system might be an ATM and a user willing to withdraw money communicating through a screen, or a browser and a web server attempting to initialize a secure connection through a TCP socket. The protocols governing such systems that we are going to study in this chapter are called \textit{bi-party communication protocols}. Such protocols have the interesting property that the description of the protocol from the viewpoint of one party is enough to deduce the protocol that must be followed from the viewpoint of the other party. The dialogue between two parties is commonly referred to as a \textit{session}.\\
 
@@ -1939,7 +1919,7 @@ We now describe what it means for a linear term to be \textit{consumed}: a term 
 
 \textit{Note: Method calls are subsumed by the first rule, as linear terms must first be delinearized with the \stt{!}\,operator before one can call methods on the underlying values.}\\
 
-We now must ensure that no linear term is \textit{consumed} more than once. To this end, we must recursively walk down the AST, while keeping track of terms that have been consumed in a \textit{usage context}, in order to disallow subsequent uses of those terms. We will denote this context by $\Delta$. \TODO{\RefFig{fig:lintypesrules} presents the type-checking rules used to reject invalid programs.}\\
+We now must ensure that no linear term is \textit{consumed} more than once. To this end, we must recursively walk down the AST, while keeping track of terms that have been consumed in a \textit{usage context}, in order to disallow subsequent uses of those terms. We will denote this context by $\Delta$.\\
 
 The astute reader will have noticed that the presence of the \stt{!}\,operator, if not handled carefully, would actually allow weakening. For example, given a value \stt{a:\,Linear[A]}, one could write \stt{val b:\, A = a.!}, and thus obtain a non-linear reference to the underlying value. To counter this, the linearity checker treats any expression of the form \stt{$e$.!}, with \stt{$e$:\,Linear[A]}, as having type \stt{Linear[A]} instead of \stt{A}.
 
@@ -2027,7 +2007,8 @@ class FileHandler {
 
 \subsubsection{Higher-Order Linear Functions}
 
-\RefCode{lst:hlf} shows the syntactic sugar provided by our implementation, which allow to refer to the type a linear lambda, ie. a lambda which consumes its argument, by \InlineS{A -*> B} instead \InlineS{Linear[A] => B}. The library also provides an implicit conversion from function of \InlineS{Linear[A] => B} to a \InlineS{A -*> B}. In \RefCode{lst}, we show the definition of a linear list, along with its \stt{map} method, which accepts a linear lambda.
+\RefCode{lst:hlf} shows the syntactic sugar provided by our implementation, which allow to refer to the type a linear lambda, ie. a lambda which consumes its argument, by \InlineS{A -*> B} instead \InlineS{Linear[A] => B}. The library also provides an implicit conversion from function of \InlineS{Linear[A] => B} to a \InlineS{A -*> B}.
+In \RefCode{lst}, we show the definition of a linear list, along with its \stt{map} method, which accepts a linear lambda.
 
 \begin{Code}{PureSCala}{lst:hlf}{Syntactic sugar for linear lambdas}
 case class -*>[A, B](f: Linear[A] => B) {
@@ -2057,43 +2038,6 @@ def bad(xs: Linear[LList[Int]]): Linear[LList[Int]] = {
   xs.map((x: Linear[Int]) => x + x + 1) // err: linear term `x` has already been used
 }
 \end{Code}
-
-%\begin{landscape}
-%\begin{figure}[htb]
-%\begin{framed}
-% 
-%\begin{equation}
-%\dfrac{
-%  \Delta \vdash t:\,\lin{A}
-%}{
-%  \Delta \cup t \vdash t! : A
-%}
-%\end{equation}
-%
-%\begin{equation}
-%\dfrac{
-%  \Delta \vdash t:\,\lin{A} \qquad \Delta \cup t \vdash b:\,B
-%}{
-%  \Delta \cup t \vdash \stt{val x:\,\lin{A} = $t$; $b$} : B
-%}
-%\end{equation}
-%
-%\begin{equation}
-%\dfrac{
-%  \Delta \vdash f :\,(T_1, \ldots, \lin{$T_i$}, \ldots, T_n) \to S
-%  \quad \Delta \vdash t_i : \lin{$T_i$} \\
-%  \quad \Delta \vdash (t_1, \ldots, t_{i-1}) :\, (T_1, \ldots, T_{i-1})
-%  \quad \Delta \cup t \vdash (t_{i+1}, \ldots, t_{i-1}) :\, (T_1, \ldots, T_{i-1})
-%}{
-%  \Delta \cup t \vdash f(t_1, \ldots, t_i \ldots, t_n) : S
-%}
-%\end{equation}
-%
-%\end{framed}
-%\vspace{-10pt}
-%\caption{Typing rules \label{fig:lintypesrules}}
-%\end{figure}
-%\begin{landscape}
 
 \subsection{Sessions Library in PureScala}
 \label{sessions_lib}
