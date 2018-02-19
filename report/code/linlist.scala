@@ -36,23 +36,6 @@ object linlist {
     def empty[A]: Linear[LList[A]] = linearize[LList[A]](LNil[A]())
   }
 
-  // type LinList[A] = Linear[LList[A]]
-
-  // @linear
-  // sealed abstract class LList[A] {
-  //   def map[B](f: A -*> B): LinList[B] = this match {
-  //     case LNil() =>
-  //       val res: LinList[B] = LNil[B]().asInstanceOf[LList[B]]
-  //       res
-
-  //     case LCons(h, t) =>
-  //       val hb: Linear[B]         = f(h)
-  //       val tb: LinList[B]  = t.map(f)
-  //       val res: LinList[B] = LCons[B](hb, tb).asInstanceOf[LList[B]]
-  //       res
-  //   }
-  // }
-
   case class LNil[A]() extends LList[A]
   case class LCons[A](head: Linear[A], tail: Linear[LList[A]]) extends LList[A]
 

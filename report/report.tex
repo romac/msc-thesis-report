@@ -130,7 +130,7 @@
   breakautoindent=false,
   %breakatwhitespace=false,
   %columns=fullflexible,
-  multicols=2,
+  multicols=0,
   framerule=0pt,
   framexrightmargin=0em,
   framexleftmargin=0em,
@@ -259,7 +259,7 @@
 
 \begin{abstract}
 
-\TODO{Abstract}
+We present three orthogonal approaches to the verification of non-trivial programs, and systems of medium complexity, such as evaluators for domain specific languages, small actor systems, and implementations of bi-party communication protocols. We first discuss the design, implementation and semantics of a partial symbolic evaluation procedure for PureScala programs, as well as the challenges we faced to ensure termination of said procedure. Next, we define a model for actor systems which we implement as a library for Stainless, and explain how to verify that a global invariant of an actor system is preserved between each step of execution, with supporting examples. At last, we show how the addition of linear types to the type system of Stainless allows us to safely model bi-party communication protocols expressed as session types in PureScala, with a supporting example.
 
 \end{abstract}
 
@@ -293,7 +293,7 @@
 
 \section{Introduction}
 
-This project explores three orthogonal approaches to the verification of non-trivial programs, and systems of medium complexity, such as evaluators for domain specific languages, small actor systems, and implementations of bi-party communication protocols. While the techniques that we develop in this report can each stand on their own, we nonetheless briefly discuss, in each section, how a particular technique could potentially apply to one of the problem studied in another section. In \RefSec{verif}, we introduce Stainless, a verification system for programs expressed in PureScala, a subset of the Scala programming language. \RefSec{symbolic} presents the design and implementation of a partial symbolic evaluation procedure for PureScala programs. We discuss the semantics of the evaluation procedure, as well as the challenges we faced to ensure the termination of the procedure, when it is warranted. At last, we showcase the versatile abilities of the partial symbolic evaluator by applying it to non-trivial programs in two different contexts. In \RefSec{actors}, we define a model for actor systems which we implement as a library for Stainless. We then explain how one would go about verifying that a global invariant of an actor system is preserved between each step of execution. We subsequently implement a few small systems using this library, and verify for each system that the appropriate invariant is indeed preserved. At last, in \RefSec{biparty}, we show how the addition of linear types to the type system of Stainless allows us to model bi-party communication protocols expressed as session types in PureScala, using the encoding provided by an existing Scala library, while statically enforcing some safety properties which were missing from the original library.
+This project explores three orthogonal approaches to the verification of non-trivial programs, and systems of medium complexity, such as evaluators for domain specific languages, small actor systems, and implementations of bi-party communication protocols. While the techniques that we develop in this report can each stand on their own, we nonetheless briefly discuss, in each section, how a particular technique could potentially apply to one of the problem studied in another section. In \RefSec{verif}, we introduce Stainless, a verification system for programs expressed in PureScala, a subset of the Scala programming language. \RefSec{symbolic} presents the design, and implementation of a partial symbolic evaluation procedure for PureScala programs. We then discuss its semantics, as well as the challenges we faced to ensure the termination of said procedure, when it is warranted. At last, we showcase the versatile abilities of the partial symbolic evaluator by applying it to non-trivial programs in two different contexts. In \RefSec{actors}, we define a model for actor systems which we implement as a library for Stainless. We then explain how one would go about verifying that a global invariant of an actor system is preserved between each step of execution. We subsequently implement a few small systems using this library, and verify for each system that the appropriate invariant is indeed preserved. At last, in \RefSec{biparty}, we show how the addition of linear types to the type system of Stainless allows us to model bi-party communication protocols expressed as session types in PureScala, using the encoding provided by an existing Scala library, while statically enforcing some safety properties which were missing from the original library.
 
 \clearpage
 \section{Program Verification with Stainless}
@@ -2342,22 +2342,37 @@ In \RefSec{symbolic} we presented the design and implementation of a partial sym
 In \RefSec{actors}, we defined a model for actor systems, and verified in three case studies that some appropriate invariant was preserved during the execution of the system.
 At last, in \RefSec{biparty}, we have shown how the addition of linear types to the type system of Stainless allows for a safe encoding of session types in PureScala, inspired by the design of an existing Scala library.
 
-\clearpage
-
 \appendix
-
-%\begin{landscape}
-%\section{Scala Implementation of Sessions Types}
-%\label{full-sessions}
-%\lstinputlisting[language=PureScala, style=LongCode]{code/full-sessions.scala}
-%\end{landscape}
-
-\clearpage
 
 %\nocite{*}
 \bibliographystyle{ieeetr}
 \bibliography{report}
 
+\clearpage
 
+\begin{landscape}
+\section{Appendix}
+\subsection{Implementation of an interpreter for a simple programming language}
+\lstinputlisting[language=PureScala, style=LongCode]{code/comp.scala}
+
+\subsection{Implementation of an algebra over a key-value store}
+\lstinputlisting[language=PureScala, style=LongCode]{code/symeval.scala}
+
+\subsection{Implementation of a linear list}
+\lstinputlisting[language=PureScala, style=LongCode]{code/linlist.scala}
+
+\subsection{Implementation of an actor system in PureScala}
+\lstinputlisting[language=PureScala, style=LongCode]{code/actors/package.scala}
+\lstinputlisting[language=PureScala, style=LongCode]{code/actors/ActorSystem.scala}
+
+\subsection{Examples of actor systems}
+\lstinputlisting[language=PureScala, style=LongCode]{code/actors/Counting.scala}
+\lstinputlisting[language=PureScala, style=LongCode]{code/actors/ReplicatedCounter.scala}
+\lstinputlisting[language=PureScala, style=LongCode]{code/actors/Spawn.scala}
+
+\subsection{Shim for running an actor system on top of Akka}
+\lstinputlisting[language=PureScala, style=LongCode]{code/actors/shim.scala}
+
+\end{landscape}
 
 \end{document}

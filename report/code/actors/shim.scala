@@ -27,7 +27,6 @@ abstract class Behavior {
   implicit def sameBehavior: Behavior = this
 }
 
-
 object Behavior {
   case class Stopped() extends Behavior {
     def processMsg(msg: Msg)(implicit ctx: ActorContext): Behavior = {
@@ -42,3 +41,29 @@ object Behavior {
   def stopped: Stopped = Stopped()
 }
 
+class Wrapper(var behavior: Behavior) extends actor.Actor with actor.ActorLogging {
+
+  implicit val ctx = ActorContext(self, context)
+
+  def receive = {
+    case msg: Msg =>
+      log.info(s"$behavior: $msg")
+      behavior = behavior.processMsg(msg)
+    case _ => ()
+  }
+
+}
+
+abstract class ActorSystem(val name: String) {
+
+  lazy val system = actor.ActorSystem(name)
+
+  def spawn(behavior: Behavior, name: String): actor.ActorRef = {
+    system.actorOf(actor.Props(new Wrapper(behavior)), name = name)
+  }
+
+  def run(): Unit
+
+}
+
+}
