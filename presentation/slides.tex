@@ -126,6 +126,7 @@
 \useoutertheme{infolines}
 \definecolor{darkred}{rgb}{0.8,0,0}
 \usecolortheme[named=darkred]{structure}
+
 \usepackage[]{biblatex}
 \addbibresource{slides.bib}
 
@@ -711,10 +712,14 @@ Implementation}}
 \NormalTok{\}}
 
 \KeywordTok{case} \KeywordTok{class} \FunctionTok{Packet}\NormalTok{(dest: ActorRef, payload: Msg)}
-\KeywordTok{case} \KeywordTok{class} \FunctionTok{ActorContext}\NormalTok{( self: ActorRef, }\KeywordTok{var}\NormalTok{ toSend: List[Packet])}
+\KeywordTok{case} \KeywordTok{class} \FunctionTok{ActorContext}\NormalTok{(}
+\NormalTok{  self: ActorRef,}
+  \KeywordTok{var}\NormalTok{ toSend: List[Packet]}
+\NormalTok{)}
 
 \KeywordTok{abstract} \KeywordTok{class}\NormalTok{ Behavior \{}
-  \KeywordTok{def} \FunctionTok{processMsg}\NormalTok{(msg: Msg)(}\KeywordTok{implicit}\NormalTok{ ctx: ActorContext): Behavior}
+  \KeywordTok{def} \FunctionTok{processMsg}\NormalTok{(msg: Msg)}
+\NormalTok{                (}\KeywordTok{implicit}\NormalTok{ ctx: ActorContext): Behavior}
 \NormalTok{\}}
 \end{Highlighting}
 \end{Shaded}
@@ -1196,7 +1201,7 @@ allow weakening:
 \end{Shaded}
 
 To prevent this, the linearity checker treats any expression of the form
-texttt\{\(e\).!\}, with \texttt{$e$:\,Linear[A]}, as having type
+\texttt{$e$.!}, with \texttt{$e$:\,Linear[A]}, as having type
 \texttt{Linear[A]} instead of \texttt{A}.
 
 \end{frame}
@@ -1343,7 +1348,7 @@ In case we forget to reply to the \texttt{Greet} message within the
 Catching common errors}}
 
 At last, let’s see what happens if we do not handle the reply to the
-\stt{Greet} message sent in case the authentication succeeds.
+\texttt{Greet} message sent in case the authentication succeeds.
 
 \begin{Shaded}
 \begin{Highlighting}[]

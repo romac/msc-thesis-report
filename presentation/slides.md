@@ -12,6 +12,7 @@ header-includes:
   - \useoutertheme{infolines}
   - \definecolor{darkred}{rgb}{0.8,0,0}
   - \usecolortheme[named=darkred]{structure} 
+  - \renewenvironment{Shaded} {\begin{snugshade}\small} {\end{snugshade}}
 ---
 
 
@@ -333,10 +334,14 @@ abstract class ActorRef {
 }
 
 case class Packet(dest: ActorRef, payload: Msg)
-case class ActorContext( self: ActorRef, var toSend: List[Packet])
+case class ActorContext(
+  self: ActorRef,
+  var toSend: List[Packet]
+)
 
 abstract class Behavior {
-  def processMsg(msg: Msg)(implicit ctx: ActorContext): Behavior
+  def processMsg(msg: Msg)
+                (implicit ctx: ActorContext): Behavior
 }
 ```
 
@@ -620,7 +625,7 @@ val a: Linear[A] = ...
 val b: A = a.!
 ```
 
-To prevent this, the linearity checker treats any expression of the form texttt{$e$.!}, with \texttt{$e$:\,Linear[A]}, as having type \texttt{Linear[A]} instead of \texttt{A}.
+To prevent this, the linearity checker treats any expression of the form \texttt{$e$.!}, with \texttt{$e$:\,Linear[A]}, as having type \texttt{Linear[A]} instead of \texttt{A}.
 
 ## Preventing contraction
 
@@ -700,7 +705,7 @@ Linear variable `cont` of type `Out[Response]` is never used:
 
 ## Catching common errors
 
-At last, let's see what happens if we do not handle the reply to the \stt{Greet} message sent in case the authentication succeeds. 
+At last, let's see what happens if we do not handle the reply to the \texttt{Greet} message sent in case the authentication succeeds. 
 
 ```scala
 Linear term cannot be discarded:
