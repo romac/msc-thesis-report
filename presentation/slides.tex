@@ -1068,10 +1068,10 @@ Term-level encoding of session types with \emph{lchannels}}}
 \begin{Highlighting}[]
 \KeywordTok{sealed} \KeywordTok{abstract} \KeywordTok{class}\NormalTok{ AliceBob}
 \KeywordTok{case} \KeywordTok{class} \FunctionTok{Quit}\NormalTok{() }\KeywordTok{extends}\NormalTok{ AliceBob}
-\KeywordTok{case} \KeywordTok{class} \FunctionTok{Greet}\NormalTok{(name: String, cont: Out[Response]) }\KeywordTok{extends}\NormalTok{ AliceBob}
+\KeywordTok{case} \KeywordTok{class} \FunctionTok{Greet}\NormalTok{(name: String)(cont: Out[Response]) }\KeywordTok{extends}\NormalTok{ AliceBob}
 
 \KeywordTok{sealed} \KeywordTok{abstract} \KeywordTok{class}\NormalTok{ Response}
-\KeywordTok{case} \KeywordTok{class} \FunctionTok{Hello}\NormalTok{(name: String, cont: Out[AliceBob]) }\KeywordTok{extends}\NormalTok{ Response}
+\KeywordTok{case} \KeywordTok{class} \FunctionTok{Hello}\NormalTok{(name: String)(cont: Out[AliceBob]) }\KeywordTok{extends}\NormalTok{ Response}
 \KeywordTok{case} \KeywordTok{class} \FunctionTok{Bye}\NormalTok{() }\KeywordTok{extends}\NormalTok{ Response}
 \end{Highlighting}
 \end{Shaded}
@@ -1083,7 +1083,7 @@ Term-level encoding of session types with \emph{lchannels}}}
 \begin{Shaded}
 \begin{Highlighting}[]
 \KeywordTok{def} \FunctionTok{alice}\NormalTok{(c: Out[AliceBob]) = \{}
-\NormalTok{  c !! }\FunctionTok{Greet}\NormalTok{(}\StringTok{"Eve"}\NormalTok{, _) ? \{}
+\NormalTok{  c !! }\FunctionTok{Greet}\NormalTok{(}\StringTok{"Eve"}\NormalTok{) ? \{}
     \KeywordTok{case} \FunctionTok{Hello}\NormalTok{(name, cont) =>}
       \FunctionTok{println}\NormalTok{(s}\StringTok{"Hello, $name"}\NormalTok{)}
 \NormalTok{      cont ! }\FunctionTok{Quit}\NormalTok{() }\CommentTok{// or restart with `alice(cont)`}
@@ -1096,33 +1096,337 @@ Term-level encoding of session types with \emph{lchannels}}}
 
 \end{frame}
 
-\begin{frame}
+\begin{frame}[fragile]
 
-def bob(c: In{[}AliceBob{]}) = \{ c ? \{ case Greet(name, cont) if name
-== “Eve” =\textgreater{} cont !! Hello(name, \_) case Quit()
-=\textgreater{} c ! Bye() \} \}
-
-As mentioned in the paper, their encoding is sufficient to model any
-session types but, in the absence of linearity, cannot prevent all
-programmer mistakes.
+\begin{Shaded}
+\begin{Highlighting}[]
+\KeywordTok{def} \FunctionTok{bob}\NormalTok{(c: In[AliceBob]) = \{}
+\NormalTok{  c ? \{}
+    \KeywordTok{case} \FunctionTok{Greet}\NormalTok{(name)(cont) }\KeywordTok{if}\NormalTok{ name == }\StringTok{"Eve"}\NormalTok{ =>}
+\NormalTok{      cont !! }\FunctionTok{Hello}\NormalTok{(name)}
+    \KeywordTok{case} \FunctionTok{Quit}\NormalTok{() =>}
+\NormalTok{      c ! }\FunctionTok{Bye}\NormalTok{()}
+\NormalTok{  \}}
+\NormalTok{\}}
+\end{Highlighting}
+\end{Shaded}
 
 \end{frame}
 
 \begin{frame}{%
-\protect\hypertarget{implementation-3}{%
-Implementation}}
+\protect\hypertarget{the-need-for-linearity}{%
+The need for linearity}}
+
+As mentioned in the paper, this encoding is sufficient to model any
+session type but, in the absence of linearity, cannot prevent all
+programmer mistakes, such as a using a channel more than once, or
+forgetting the listen for/reply to a message.
+
+\end{frame}
+
+\begin{frame}[fragile]{%
+\protect\hypertarget{linear-types-in-purescala}{%
+Linear types in PureScala}}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\KeywordTok{class}\NormalTok{ Linear[+A](_value: A) \{}
+  \KeywordTok{def}\NormalTok{ ! = _value}
+\NormalTok{\}}
+
+\KeywordTok{implicit} \KeywordTok{def}\NormalTok{ linearize[A](value: A): Linear[A] = }\KeywordTok{new} \FunctionTok{Linear}\NormalTok{(value)}
+
+\KeywordTok{object}\NormalTok{ implicits \{}
+  \KeywordTok{implicit} \KeywordTok{def}\NormalTok{ delinearize[A](lin: Linear[A]): A = lin!}
+\NormalTok{\}}
+\end{Highlighting}
+\end{Shaded}
 
 \end{frame}
 
 \begin{frame}{%
-\protect\hypertarget{termination-1}{%
-Termination}}
+\protect\hypertarget{definition}{%
+Definition}}
+
+A term \texttt{t} of type \texttt{Linear[A]}, for any type \texttt{A},
+is deemed \texttt{consumed} in an expression \(e\) when any of the
+following propositions is true:
+
+\begin{itemize}
+\tightlist
+\item
+  The underlying value is extracted, via the \texttt{!} method.
+\item
+  The term is assigned to a variable.
+\item
+  The term is supplied as an argument to function.
+\item
+  The term is supplied as an argument to a method.
+\item
+  The term is supplied as an argument to a lambda.
+\item
+  The term is supplied as an argument to a constructor.
+\end{itemize}
+
+\end{frame}
+
+\begin{frame}{%
+\protect\hypertarget{preventing-weakening}{%
+Preventing weakening}}
+
+To ensure that no linear term is \textit{consumed} more than once, we
+recursively walk down the AST, while keeping track of terms that have
+been consumed in a \textit{usage context}, in order to disallow
+subsequent uses of those terms.
+
+\end{frame}
+
+\begin{frame}[fragile]{%
+\protect\hypertarget{the-operator}{%
+The \texttt{!} operator}}
+
+If it were not handled carefully, the \texttt{!} operator would actually
+allow weakening:
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\KeywordTok{val}\NormalTok{ a: Linear[A] = ...}
+\KeywordTok{val}\NormalTok{ b: A = a.!}
+\end{Highlighting}
+\end{Shaded}
+
+To prevent this, the linearity checker treats any expression of the form
+texttt\{\(e\).!\}, with \texttt{$e$:\,Linear[A]}, as having type
+\texttt{Linear[A]} instead of \texttt{A}.
+
+\end{frame}
+
+\begin{frame}{%
+\protect\hypertarget{preventing-contraction}{%
+Preventing contraction}}
+
+Because linear logic does not allow contraction, we must also ensure
+that no linear term is \emph{dropped}, that is to say, ensure that every
+linear terms are consumed at least once.
+
+To this end, we check every linear variables being introduced within a
+function against the \textit{usage context} resulting from the linear
+type checking algorithm to determine whether each and every of those
+variable has indeed been \textit{consumed} at some point, and reject the
+program otherwise.
+
+\end{frame}
+
+\begin{frame}{%
+\protect\hypertarget{linear-terms-in-contracts}{%
+Linear terms in contracts}}
+
+Because in PureScala semantics, contracts are not executed at runtime,
+we can safely disable the linearity checker within contracts. This
+allows us to refer to linear variable in a pre- or post-condition
+without effectively consuming it.
+
+\end{frame}
+
+\begin{frame}[fragile]{%
+\protect\hypertarget{linear-datatypes}{%
+Linear datatypes}}
+
+The linearity checker also ensures that any value of type \texttt{A},
+where \texttt{A} is type with at least one constructor (transitively)
+containing linear fields, is introduced linearly. Failing to do so would
+allow having multiple references to a linear value.
+
+\end{frame}
+
+\begin{frame}[fragile]{%
+\protect\hypertarget{marking-the-current-object-as-linear}{%
+Marking the current object as linear}}
+
+Within a class method, one can specify that the current object
+\texttt{this} must be treated as a linear variable (both in the caller
+and the callee) by marking the method with an \texttt{@linear}
+annotation.
+
+\end{frame}
+
+\begin{frame}[fragile]{%
+\protect\hypertarget{higher-order-linear-functions}{%
+Higher-order linear functions}}
+
+For convenience, we define a type
+alias\footnote{only very recently added to Stainless} for higher-order
+linear functions:
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\KeywordTok{type}\NormalTok{ -*>[A, B] = Linear[A] => B }
+\KeywordTok{def}\NormalTok{ map[A, B](l: LinList[A], f: A -*> B): LinList[B] = ...}
+\end{Highlighting}
+\end{Shaded}
+
+\end{frame}
+
+\begin{frame}[fragile]{%
+\protect\hypertarget{linear-channels-in-purescala}{%
+Linear channels in PureScala}}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\KeywordTok{type}\NormalTok{ In[A]  = Linear[InChan[A]]}
+\KeywordTok{type}\NormalTok{ Out[A] = Linear[OutChan[A]]}
+
+\NormalTok{@linear }\KeywordTok{class}\NormalTok{ InChan[A] \{}
+  \KeywordTok{def}\NormalTok{ ?[B](f: A -*> B)(}\KeywordTok{implicit}\NormalTok{ d: Duration): B = ???}
+\NormalTok{\}}
+
+\NormalTok{@linear }\KeywordTok{class}\NormalTok{ OutChan[A] \{}
+  \KeywordTok{def}\NormalTok{ !(msg: A): Unit = ???}
+  \KeywordTok{def}\NormalTok{ !![B](h: Out[B] => A): In[B] = ???}
+  \KeywordTok{def}\NormalTok{ create[B](): (In[B], Out[B]) = ???}
+\NormalTok{\}}
+\end{Highlighting}
+\end{Shaded}
+
+\end{frame}
+
+\begin{frame}[fragile]{%
+\protect\hypertarget{catching-common-errors}{%
+Catching common errors}}
+
+If we provide an empty body for the function \texttt{alice}, we would
+then be greeted with the following error:
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{Linear variable `c` of }\KeywordTok{type}\NormalTok{ `Out[AliceBob]` is never used:}
+      \KeywordTok{def} \FunctionTok{alice}\NormalTok{(c: Out[AliceBob]): Unit = \{}
+\NormalTok{                    ^^^^^^^^^^^^^^^^}
+\end{Highlighting}
+\end{Shaded}
+
+\end{frame}
+
+\begin{frame}[fragile]{%
+\protect\hypertarget{catching-common-errors-1}{%
+Catching common errors}}
+
+Re-using the same channel twice would also give rise to an error:
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{Linear term `cont` has already been used:}
+    \FunctionTok{doSomething}\NormalTok{(cont)}
+\NormalTok{                ^^^^}
+
+\NormalTok{Term used here:}
+\NormalTok{    cont !! }\FunctionTok{Greet}\NormalTok{(name)(_) ? }\FunctionTok{alice}\NormalTok{(_)}
+\NormalTok{    ^^^^}
+\end{Highlighting}
+\end{Shaded}
+
+In case we forget to reply to the \texttt{Greet} message within the
+\texttt{bob} function, we get:
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{Linear variable `cont` of }\KeywordTok{type}\NormalTok{ `Out[Response]` is never used:}
+    \KeywordTok{case} \FunctionTok{Greet}\NormalTok{(name)(cont) =>}
+\NormalTok{                     ^^^^}
+\end{Highlighting}
+\end{Shaded}
+
+\end{frame}
+
+\begin{frame}[fragile]{%
+\protect\hypertarget{catching-common-errors-2}{%
+Catching common errors}}
+
+At last, let’s see what happens if we do not handle the reply to the
+\stt{Greet} message sent in case the authentication succeeds.
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{Linear term cannot be discarded:}
+\NormalTok{    cont !! }\FunctionTok{Greet}\NormalTok{(name)}
+\NormalTok{    ^^^^^^^^^^^^^^^^^^^}
+\end{Highlighting}
+\end{Shaded}
+
+In this case, the linearity checker is able to determine that the linear
+value return by the \texttt{!!} is discarded because the Scala compiler
+implicitely converts it to \texttt{Unit}.
+
+\end{frame}
+
+\begin{frame}{%
+\protect\hypertarget{results-1}{%
+Results}}
+
+\begin{itemize}
+\tightlist
+\item
+  Implementation of a simple protocol involving an ATM and its user.
+\item
+  Partial implementation of the TLS 1.2 handshake protocol (\emph{work
+  in progress}).
+\end{itemize}
 
 \end{frame}
 
 \begin{frame}{%
 \protect\hypertarget{conclusion-2}{%
 Conclusion}}
+
+\begin{itemize}
+\tightlist
+\item
+  We provide an implementation of linear types for PureScala, an
+  object-oriented language.
+\item
+  We implemented linear channels in PureScala, fully compatible with the
+  original Scala version.
+\item
+  We have shown that linearity helps catching some potential errors that
+  could arise while writing the program.
+\item
+  Can also be put to use for designing safe APIs.
+\end{itemize}
+
+\end{frame}
+
+\begin{frame}{%
+\protect\hypertarget{furter-work}{%
+Furter work}}
+
+\begin{itemize}
+\tightlist
+\item
+  Assuming soundness of PureScala’s type system, prove soundness of the
+  linear extension.
+\item
+  Implement affine types and investigate further how to implement a
+  borrow checker on top.
+\item
+  Investigate how to leverage linearity to model multiparty session
+  types for actor systems.
+\end{itemize}
+
+\end{frame}
+
+\hypertarget{thank-you}{%
+\section{Thank you}\label{thank-you}}
+
+\begin{frame}{%
+\protect\hypertarget{thank-you-1}{%
+Thank you}}
+
+Special thanks to Prof.~Viktor Kuncak and Dr.~Jad Hamza for their
+mentorship all along the project, as well as to Dr.~Stephan Merz for his
+very constructive remarks. Many thanks as well to Nicolas Voirol,
+Dr.~Andreas Pavlogiannis, Manos Koukoutos, Marco Antogini, Dr.~Ravi
+Kandhadai, Georg Schmid, Romain Edelmann and Mikael Mayer for their
+support and insights.
 
 \end{frame}
 

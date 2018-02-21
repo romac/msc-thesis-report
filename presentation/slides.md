@@ -544,10 +544,10 @@ Despite the lack of linear types in Scala, there already exists such an encoding
 ```scala
 sealed abstract class AliceBob
 case class Quit() extends AliceBob
-case class Greet(name: String, cont: Out[Response]) extends AliceBob
+case class Greet(name: String)(cont: Out[Response]) extends AliceBob
 
 sealed abstract class Response
-case class Hello(name: String, cont: Out[AliceBob]) extends Response
+case class Hello(name: String)(cont: Out[AliceBob]) extends Response
 case class Bye() extends Response
 ```
 
@@ -555,7 +555,7 @@ case class Bye() extends Response
 
 ```scala
 def alice(c: Out[AliceBob]) = {
-  c !! Greet("Eve", _) ? {
+  c !! Greet("Eve") ? {
     case Hello(name, cont) =>
       println(s"Hello, $name")
       cont ! Quit() // or restart with `alice(cont)`
@@ -567,23 +567,170 @@ def alice(c: Out[AliceBob]) = {
 
 ---
 
-
+```scala
 def bob(c: In[AliceBob]) = {
   c ? {
-    case Greet(name, cont) if name == "Eve" =>
-      cont !! Hello(name, _)
+    case Greet(name)(cont) if name == "Eve" =>
+      cont !! Hello(name)
     case Quit() =>
       c ! Bye()
   }
 }
+```
 
-As mentioned in the paper, their encoding is sufficient to model any session types but, in the absence of linearity, cannot prevent all programmer mistakes.
+## The need for linearity
 
-## Implementation
+As mentioned in the paper, this encoding is sufficient to model any session type but, in the absence of linearity, cannot prevent all programmer mistakes, such as a using a channel more than once, or forgetting the listen for/reply to a message.
 
+## Linear types in PureScala
 
-## Termination
+```scala
+class Linear[+A](_value: A) {
+  def ! = _value
+}
 
+implicit def linearize[A](value: A): Linear[A] = new Linear(value)
+
+object implicits {
+  implicit def delinearize[A](lin: Linear[A]): A = lin!
+}
+```
+
+## Definition
+
+A term \texttt{t} of type \texttt{Linear[A]}, for any type \texttt{A}, is deemed \texttt{consumed} in an expression $e$ when any of the following propositions is true:
+
+- The underlying value is extracted, via the \texttt{!} method.
+- The term is assigned to a variable.
+- The term is supplied as an argument to function.
+- The term is supplied as an argument to a method.
+- The term is supplied as an argument to a lambda.
+- The term is supplied as an argument to a constructor.
+
+## Preventing weakening
+
+To ensure that no linear term is \textit{consumed} more than once, we recursively walk down the AST, while keeping track of terms that have been consumed in a \textit{usage context}, in order to disallow subsequent uses of those terms.
+
+## The `!` operator
+
+If it were not handled carefully, the \texttt{!} operator would actually allow weakening:
+
+```scala
+val a: Linear[A] = ...
+val b: A = a.!
+```
+
+To prevent this, the linearity checker treats any expression of the form texttt{$e$.!}, with \texttt{$e$:\,Linear[A]}, as having type \texttt{Linear[A]} instead of \texttt{A}.
+
+## Preventing contraction
+
+Because linear logic does not allow contraction, we must also ensure that no linear term is *dropped*, that is to say, ensure that every linear terms are consumed at least once.
+
+To this end, we check every linear variables being introduced within a function against the \textit{usage context} resulting from the linear type checking algorithm to determine whether each and every of those variable has indeed been \textit{consumed} at some point, and reject the program otherwise.
+
+## Linear terms in contracts
+
+Because in PureScala semantics, contracts are not executed at runtime, we can safely disable the linearity checker within contracts. This allows us to refer to linear variable in a pre- or post-condition without effectively consuming it.
+
+## Linear datatypes
+
+The linearity checker also ensures that any value of type `A`, where `A` is type with at least one constructor (transitively) containing linear fields, is introduced linearly. Failing to do so would allow having multiple references to a linear value.
+
+## Marking the current object as linear
+
+Within a class method, one can specify that the current object `this` must be treated as a linear variable (both in the caller and the callee) by marking the method with an `@linear` annotation.
+
+## Higher-order linear functions
+
+For convenience, we define a type alias\footnote{only very recently added to Stainless} for higher-order linear functions:
+
+```scala
+type -*>[A, B] = Linear[A] => B 
+def map[A, B](l: LinList[A], f: A -*> B): LinList[B] = ...
+```
+
+## Linear channels in PureScala
+
+```scala
+type In[A]  = Linear[InChan[A]]
+type Out[A] = Linear[OutChan[A]]
+
+@linear class InChan[A] {
+  def ?[B](f: A -*> B)(implicit d: Duration): B = ???
+}
+
+@linear class OutChan[A] {
+  def !(msg: A): Unit = ???
+  def !![B](h: Out[B] => A): In[B] = ???
+  def create[B](): (In[B], Out[B]) = ???
+}
+```
+
+## Catching common errors
+
+If we provide an empty body for the function `alice`, we would then be greeted with the following error:
+
+```scala
+Linear variable `c` of type `Out[AliceBob]` is never used:
+      def alice(c: Out[AliceBob]): Unit = {
+                    ^^^^^^^^^^^^^^^^
+```
+
+## Catching common errors
+
+Re-using the same channel twice would also give rise to an error:
+
+```scala
+Linear term `cont` has already been used:
+    doSomething(cont)
+                ^^^^
+
+Term used here:
+    cont !! Greet(name)(_) ? alice(_)
+    ^^^^
+```
+
+In case we forget to reply to the `Greet` message within the `bob` function, we get:
+
+```scala
+Linear variable `cont` of type `Out[Response]` is never used:
+    case Greet(name)(cont) =>
+                     ^^^^
+```
+
+## Catching common errors
+
+At last, let's see what happens if we do not handle the reply to the \stt{Greet} message sent in case the authentication succeeds. 
+
+```scala
+Linear term cannot be discarded:
+    cont !! Greet(name)
+    ^^^^^^^^^^^^^^^^^^^
+```
+
+In this case, the linearity checker is able to determine that the linear value return by the `!!` is discarded because the Scala compiler implicitely converts it to `Unit`.
+
+## Results
+
+- Implementation of a simple protocol involving an ATM and its user.
+- Partial implementation of the TLS 1.2 handshake protocol (*work in progress*).
 
 ## Conclusion
+
+- We provide an implementation of linear types for PureScala, an object-oriented language.
+- We implemented linear channels in PureScala, fully compatible with the original Scala version.
+- We have shown that linearity helps catching some potential errors that could arise while writing the program.
+- Can also be put to use for designing safe APIs.
+
+## Furter work
+
+- Assuming soundness of PureScala's type system, prove soundness of the linear extension.
+- Implement affine types and investigate further how to implement a borrow checker on top.
+- Investigate how to leverage linearity to model multiparty session types for actor systems.
+
+# Thank you
+
+## Thank you
+
+Special thanks to Prof. Viktor Kuncak and Dr. Jad Hamza for their mentorship all along the project, as well as to Dr. Stephan Merz for his very constructive remarks. Many thanks as well to Nicolas Voirol, Dr. Andreas Pavlogiannis, Manos Koukoutos, Marco Antogini, Dr. Ravi Kandhadai, Georg Schmid, Romain Edelmann and Mikael Mayer for their support and insights.
 
