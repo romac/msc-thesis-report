@@ -18,6 +18,7 @@
   \usepackage{unicode-math}
   \defaultfontfeatures{Ligatures=TeX,Scale=MatchLowercase}
 \fi
+\usetheme[]{CambridgeUS}
 % use upquote if available, for straight quotes in verbatim environments
 \IfFileExists{upquote.sty}{\usepackage{upquote}}{}
 % use microtype if available
@@ -39,6 +40,44 @@
             breaklinks=true}
 \urlstyle{same}  % don't use monospace font for urls
 \newif\ifbibliography
+\usepackage{color}
+\usepackage{fancyvrb}
+\newcommand{\VerbBar}{|}
+\newcommand{\VERB}{\Verb[commandchars=\\\{\}]}
+\DefineVerbatimEnvironment{Highlighting}{Verbatim}{commandchars=\\\{\}}
+% Add ',fontsize=\small' for more characters per line
+\newenvironment{Shaded}{}{}
+\newcommand{\AlertTok}[1]{\textcolor[rgb]{1.00,0.00,0.00}{\textbf{#1}}}
+\newcommand{\AnnotationTok}[1]{\textcolor[rgb]{0.38,0.63,0.69}{\textbf{\textit{#1}}}}
+\newcommand{\AttributeTok}[1]{\textcolor[rgb]{0.49,0.56,0.16}{#1}}
+\newcommand{\BaseNTok}[1]{\textcolor[rgb]{0.25,0.63,0.44}{#1}}
+\newcommand{\BuiltInTok}[1]{#1}
+\newcommand{\CharTok}[1]{\textcolor[rgb]{0.25,0.44,0.63}{#1}}
+\newcommand{\CommentTok}[1]{\textcolor[rgb]{0.38,0.63,0.69}{\textit{#1}}}
+\newcommand{\CommentVarTok}[1]{\textcolor[rgb]{0.38,0.63,0.69}{\textbf{\textit{#1}}}}
+\newcommand{\ConstantTok}[1]{\textcolor[rgb]{0.53,0.00,0.00}{#1}}
+\newcommand{\ControlFlowTok}[1]{\textcolor[rgb]{0.00,0.44,0.13}{\textbf{#1}}}
+\newcommand{\DataTypeTok}[1]{\textcolor[rgb]{0.56,0.13,0.00}{#1}}
+\newcommand{\DecValTok}[1]{\textcolor[rgb]{0.25,0.63,0.44}{#1}}
+\newcommand{\DocumentationTok}[1]{\textcolor[rgb]{0.73,0.13,0.13}{\textit{#1}}}
+\newcommand{\ErrorTok}[1]{\textcolor[rgb]{1.00,0.00,0.00}{\textbf{#1}}}
+\newcommand{\ExtensionTok}[1]{#1}
+\newcommand{\FloatTok}[1]{\textcolor[rgb]{0.25,0.63,0.44}{#1}}
+\newcommand{\FunctionTok}[1]{\textcolor[rgb]{0.02,0.16,0.49}{#1}}
+\newcommand{\ImportTok}[1]{#1}
+\newcommand{\InformationTok}[1]{\textcolor[rgb]{0.38,0.63,0.69}{\textbf{\textit{#1}}}}
+\newcommand{\KeywordTok}[1]{\textcolor[rgb]{0.00,0.44,0.13}{\textbf{#1}}}
+\newcommand{\NormalTok}[1]{#1}
+\newcommand{\OperatorTok}[1]{\textcolor[rgb]{0.40,0.40,0.40}{#1}}
+\newcommand{\OtherTok}[1]{\textcolor[rgb]{0.00,0.44,0.13}{#1}}
+\newcommand{\PreprocessorTok}[1]{\textcolor[rgb]{0.74,0.48,0.00}{#1}}
+\newcommand{\RegionMarkerTok}[1]{#1}
+\newcommand{\SpecialCharTok}[1]{\textcolor[rgb]{0.25,0.44,0.63}{#1}}
+\newcommand{\SpecialStringTok}[1]{\textcolor[rgb]{0.73,0.40,0.53}{#1}}
+\newcommand{\StringTok}[1]{\textcolor[rgb]{0.25,0.44,0.63}{#1}}
+\newcommand{\VariableTok}[1]{\textcolor[rgb]{0.10,0.09,0.49}{#1}}
+\newcommand{\VerbatimStringTok}[1]{\textcolor[rgb]{0.25,0.44,0.63}{#1}}
+\newcommand{\WarningTok}[1]{\textcolor[rgb]{0.38,0.63,0.69}{\textbf{\textit{#1}}}}
 % Prevent slide breaks in the middle of a paragraph:
 \widowpenalties 1 10000
 \raggedbottom
@@ -83,6 +122,12 @@
 \makeatother
 
 \institute{Laboratory for Automated Reasoning and Analysis, EPFL}
+\useinnertheme{rectangles}
+\useoutertheme{infolines}
+\definecolor{darkred}{rgb}{0.8,0,0}
+\usecolortheme[named=darkred]{structure}
+\usepackage[]{biblatex}
+\addbibresource{slides.bib}
 
 \title{Symbolic Partial Evaluation of PureScala Programs}
 \providecommand{\subtitle}[1]{}
@@ -109,52 +154,478 @@ Outline}}
 
 \end{frame}
 
+\hypertarget{symbolic-partial-evaluation-of-purescala-programs}{%
+\section{Symbolic Partial Evaluation of PureScala
+Programs}\label{symbolic-partial-evaluation-of-purescala-programs}}
+
+\begin{frame}[fragile]{%
+\protect\hypertarget{motivation}{%
+Motivation}}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\KeywordTok{def}\NormalTok{ insert[A, B](kvs: List[(A, B)], map: Map[A, B]) = \{}
+\NormalTok{  kvs.}\FunctionTok{foldLeft}\NormalTok{(map) \{}
+    \KeywordTok{case}\NormalTok{ (acc, (k, v)) }\KeywordTok{if}\NormalTok{ !acc.}\FunctionTok{contains}\NormalTok{(k) =>}
+\NormalTok{      acc.}\FunctionTok{updated}\NormalTok{(k, v)}
+    \KeywordTok{case}\NormalTok{ (acc, _) => acc}
+\NormalTok{  \}}
+\NormalTok{\}}
+\KeywordTok{def} \FunctionTok{test}\NormalTok{(map: Map[String, Int], x: Int, y: Int) = \{}
+  \FunctionTok{require}\NormalTok{(!map.}\FunctionTok{contains}\NormalTok{(}\StringTok{"a"}\NormalTok{) && map.}\FunctionTok{contains}\NormalTok{(}\StringTok{"b"}\NormalTok{))}
+  \KeywordTok{val}\NormalTok{ xs = (}\StringTok{"a"}\NormalTok{, x) :: (}\StringTok{"b"}\NormalTok{, y) :: Nil}
+  \KeywordTok{val}\NormalTok{ res = }\FunctionTok{insert}\NormalTok{(xs, map)}
+  \FunctionTok{res}\NormalTok{(}\StringTok{"a"}\NormalTok{) == x && }\FunctionTok{res}\NormalTok{(}\StringTok{"b"}\NormalTok{) == }\FunctionTok{map}\NormalTok{(}\StringTok{"b"}\NormalTok{)}
+\NormalTok{\} holds}
+\end{Highlighting}
+\end{Shaded}
+
+\end{frame}
+
+\begin{frame}[fragile]
+
+\begin{verbatim}
+$ stainless --timeout=7200 test.scala
+\end{verbatim}
+
+\textbf{TIMEOUT}
+\footnote{This example actually verifies as-is with the latest Stainless, but we are using it for the sake of the argument}
+
+\end{frame}
+
+\begin{frame}[fragile]{%
+\protect\hypertarget{idea}{%
+Idea}}
+
+While some input to \texttt{test} are abstract, we know enough about the
+whole program to reduce it to a simpler form, which has higher chances
+of verifying, or will verify quicker.
+
+\end{frame}
+
+\begin{frame}[fragile]
+
+Let’s consider the call to \texttt{insert} in the \texttt{test}
+function:
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\FunctionTok{insert}\NormalTok{(xs, map)}
+\end{Highlighting}
+\end{Shaded}
+
+\end{frame}
+
+\begin{frame}[fragile]
+
+We start by inlining the definition of \texttt{xs}:
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\FunctionTok{insert}\NormalTok{((}\StringTok{"a"}\NormalTok{, x) :: (}\StringTok{"b"}\NormalTok{, y) :: }\FunctionTok{Nil}\NormalTok{(), map)}
+\end{Highlighting}
+\end{Shaded}
+
+\end{frame}
+
+\begin{frame}[fragile]
+
+We then unfold the definition of \texttt{insert}:
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{((}\StringTok{"a"}\NormalTok{, x) :: (}\StringTok{"b"}\NormalTok{, y) :: }\FunctionTok{Nil}\NormalTok{()).}\FunctionTok{foldLeft}\NormalTok{(map) \{}
+  \KeywordTok{case}\NormalTok{ (acc, (k, v)) }\KeywordTok{if}\NormalTok{ !acc.}\FunctionTok{contains}\NormalTok{(k) => acc.}\FunctionTok{updated}\NormalTok{(k, v)}
+  \KeywordTok{case}\NormalTok{ (acc, _)                          => acc}
+\NormalTok{\}}
+\end{Highlighting}
+\end{Shaded}
+
+\end{frame}
+
+\begin{frame}[fragile]
+
+We now unfold the definition of \texttt{foldLeft}:
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\KeywordTok{val}\NormalTok{ f = \{}
+  \KeywordTok{case}\NormalTok{ (acc, (k, v)) }\KeywordTok{if}\NormalTok{ !acc.}\FunctionTok{contains}\NormalTok{(k) => acc.}\FunctionTok{updated}\NormalTok{(k, v)}
+  \KeywordTok{case}\NormalTok{ (acc, _)                          => acc}
+\NormalTok{\}}
+
+\NormalTok{((}\StringTok{"a"}\NormalTok{, x) :: (}\StringTok{"b"}\NormalTok{, y) :: }\FunctionTok{Nil}\NormalTok{()) }\KeywordTok{match}\NormalTok{ \{}
+  \KeywordTok{case}\NormalTok{ Nil     => map}
+  \KeywordTok{case}\NormalTok{ x :: xs => xs.}\FunctionTok{foldLeft}\NormalTok{(}\FunctionTok{f}\NormalTok{(z, x))(f)}
+\NormalTok{\}}
+\end{Highlighting}
+\end{Shaded}
+
+For legibility, we have assigned the supplied match expression to a
+variable instead of inlining it straight away.
+
+\end{frame}
+
+\begin{frame}[fragile]
+
+We select the second case of the pattern match:
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\KeywordTok{val}\NormalTok{ f = \{}
+  \KeywordTok{case}\NormalTok{ (acc, (k, v)) }\KeywordTok{if}\NormalTok{ !acc.}\FunctionTok{contains}\NormalTok{(k) => acc.}\FunctionTok{updated}\NormalTok{(k, v)}
+  \KeywordTok{case}\NormalTok{ (acc, _)                          => acc}
+\NormalTok{\}}
+
+\NormalTok{(}\StringTok{"b"}\NormalTok{ -> y :: }\FunctionTok{Nil}\NormalTok{()).}\FunctionTok{foldLeft}\NormalTok{(}\FunctionTok{f}\NormalTok{(map, (}\StringTok{"a"}\NormalTok{, x)))(f)}
+\end{Highlighting}
+\end{Shaded}
+
+\end{frame}
+
+\begin{frame}[fragile]
+
+We now evaluate the first two arguments of the call to
+\texttt{foldLeft}. The first one stays as is as it is already in normal
+form. The second argument \texttt{f(map,\ ("a",\ x))} becomes:
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{(map, (}\StringTok{"a"}\NormalTok{, x)) }\KeywordTok{match}\NormalTok{ \{}
+  \KeywordTok{case}\NormalTok{ (acc, (k, v)) }\KeywordTok{if}\NormalTok{ !acc.}\FunctionTok{contains}\NormalTok{(k) => acc.}\FunctionTok{updated}\NormalTok{(k, v)}
+  \KeywordTok{case}\NormalTok{ (acc, _)                          => acc}
+\NormalTok{\}}
+\end{Highlighting}
+\end{Shaded}
+
+\end{frame}
+
+\begin{frame}[fragile]
+
+Recall the precondition of the \texttt{test} function:
+\texttt{!map.contains("a")\ \&\&\ map.contains("b")}. When we inline the
+scrutinee into the guard of the first case, we obtain
+\texttt{!map.contains("a")}, which by the aforementioned precondition we
+can deduce is \texttt{true}. We thus select the first case, and inline
+the scrutinee within it, yielding:
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{map.}\FunctionTok{updated}\NormalTok{(}\StringTok{"a"}\NormalTok{, x)}
+\end{Highlighting}
+\end{Shaded}
+
+\end{frame}
+
+\begin{frame}[fragile]
+
+We are now left with this expression:
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{(}\StringTok{"b"}\NormalTok{ -> y :: }\FunctionTok{Nil}\NormalTok{()).}\FunctionTok{foldLeft}\NormalTok{(map.}\FunctionTok{updated}\NormalTok{(}\StringTok{"a"}\NormalTok{, x))(f)}
+\end{Highlighting}
+\end{Shaded}
+
+\end{frame}
+
+\begin{frame}[fragile]
+
+We can now unfold \texttt{foldLeft} one more time:
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{((}\StringTok{"b"}\NormalTok{, y) :: }\FunctionTok{Nil}\NormalTok{()) }\KeywordTok{match}\NormalTok{ \{}
+  \KeywordTok{case}\NormalTok{ Nil     => map.}\FunctionTok{updated}\NormalTok{(}\StringTok{"a"}\NormalTok{, x)}
+  \KeywordTok{case}\NormalTok{ x :: xs => xs.}\FunctionTok{foldLeft}\NormalTok{(}\FunctionTok{f}\NormalTok{(z, x))(f)}
+\NormalTok{\}}
+\end{Highlighting}
+\end{Shaded}
+
+\end{frame}
+
+\begin{frame}[fragile]
+
+Once again, we recurse in the second case of the match expression:
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\FunctionTok{Nil}\NormalTok{().}\FunctionTok{foldLeft}\NormalTok{(}\FunctionTok{f}\NormalTok{(map.}\FunctionTok{updated}\NormalTok{(}\StringTok{"a"}\NormalTok{, x), (}\StringTok{"b"}\NormalTok{, y)))(f)}
+\end{Highlighting}
+\end{Shaded}
+
+\end{frame}
+
+\begin{frame}[fragile]
+
+We now unfold the definition of \texttt{f} in
+\texttt{f(map.updated("a",\ x),\ ("b",\ y))}, yielding:
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{(map.}\FunctionTok{updated}\NormalTok{(}\StringTok{"a"}\NormalTok{, x), (}\StringTok{"b"}\NormalTok{, y)) }\KeywordTok{match}\NormalTok{ \{}
+  \KeywordTok{case}\NormalTok{ (acc, (k, v)) }\KeywordTok{if}\NormalTok{ !acc.}\FunctionTok{contains}\NormalTok{(k) => acc.}\FunctionTok{updated}\NormalTok{(k, v)}
+  \KeywordTok{case}\NormalTok{ (acc, _)                          => acc}
+\NormalTok{\}}
+\end{Highlighting}
+\end{Shaded}
+
+\end{frame}
+
+\begin{frame}[fragile]
+
+Recall once again the precondition of the \texttt{test} function:
+\texttt{!map.contains("a")\ \&\&\ map.contains("b")}. This time, the
+guard reads as \texttt{!map.contains("b")}, which by precondition we can
+deduce is \texttt{false}. We thus select the second case, and inline the
+scrutinee within it, yielding:
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{map.}\FunctionTok{updated}\NormalTok{(}\StringTok{"a"}\NormalTok{, x)}
+\end{Highlighting}
+\end{Shaded}
+
+\end{frame}
+
+\begin{frame}[fragile]
+
+We are now left with the following expression:
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\FunctionTok{Nil}\NormalTok{().}\FunctionTok{foldLeft}\NormalTok{(map.}\FunctionTok{updated}\NormalTok{(}\StringTok{"a"}\NormalTok{, x))(f)}
+\end{Highlighting}
+\end{Shaded}
+
+\end{frame}
+
+\begin{frame}[fragile]
+
+We can now unfold \texttt{foldLeft} one last time:
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{Nil }\KeywordTok{match}\NormalTok{ \{}
+  \KeywordTok{case} \FunctionTok{Nil}\NormalTok{()   => map.}\FunctionTok{updated}\NormalTok{(}\StringTok{"a"}\NormalTok{, x)}
+  \KeywordTok{case}\NormalTok{ x :: xs => xs.}\FunctionTok{foldLeft}\NormalTok{(}\FunctionTok{f}\NormalTok{(z, x))(f)}
+\NormalTok{\}}
+\end{Highlighting}
+\end{Shaded}
+
+\end{frame}
+
+\begin{frame}[fragile]
+
+This time, we recurse in the first case, which leaves us with:
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{map.}\FunctionTok{updated}\NormalTok{(}\StringTok{"a"}\NormalTok{, x)}
+\end{Highlighting}
+\end{Shaded}
+
+\end{frame}
+
+\begin{frame}[fragile]
+
+At last, we substitute this expression for the call to \texttt{insert}
+within \texttt{test}’s body, resulting in:
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\KeywordTok{def} \FunctionTok{test}\NormalTok{(map: Map[String, Int], x: Int, y: Int) = \{}
+  \FunctionTok{require}\NormalTok{(!map.}\FunctionTok{contains}\NormalTok{(}\StringTok{"a"}\NormalTok{) && map.}\FunctionTok{contains}\NormalTok{(}\StringTok{"b"}\NormalTok{))}
+
+  \KeywordTok{val}\NormalTok{ res = map.}\FunctionTok{updated}\NormalTok{(}\StringTok{"a"}\NormalTok{, x)}
+
+  \FunctionTok{res}\NormalTok{(}\StringTok{"a"}\NormalTok{) == x && }\FunctionTok{res}\NormalTok{(}\StringTok{"b"}\NormalTok{) == }\FunctionTok{map}\NormalTok{(}\StringTok{"b"}\NormalTok{)}
+\NormalTok{\} holds}
+\end{Highlighting}
+\end{Shaded}
+
+\end{frame}
+
+\begin{frame}[fragile]
+
+This expression cannot be reduced further, as \texttt{map} is abstract
+and \texttt{updated} is a special language construct which can only be
+evaluated when applied to a concrete, finite map.
+
+If one knows the semantics of \texttt{Map}, it becomes fairly obvious
+that the postcondition is valid, for any initial value of \texttt{map},
+\texttt{x}, and \texttt{y}.
+
+\end{frame}
+
 \begin{frame}{%
-\protect\hypertarget{symbolic-partial-evaluation-of-purescala-programs}{%
-Symbolic Partial Evaluation of PureScala Programs}}
+\protect\hypertarget{definitions}{%
+Definitions}}
 
 \begin{itemize}
 \tightlist
 \item
-  Motivation
+  \emph{Partial evaluation} \cite{Jones:1993:PEA:153676} is the process
+  of executing a program in the presence of partial inputs, effectively
+  specializing it program that is more performant or easier to reason
+  about than the initial one.
+\end{itemize}
+
+\pause
+
+\begin{itemize}
+\tightlist
 \item
-  Solution
+  \emph{Symbolic evaluation}
+  \cite{King:1970:PV:905403, King:1976:SEP:360248.360252} is the process
+  of gathering knowledge about symbolic values in a program by executing
+  it, in order to verify whether or not a given program satisfies some
+  properties, such as the absence of divisions by zero, or the
+  preservation of some invariant during execution
+  \cite{DBLP:journals/corr/BaldoniCDDF16}.
+\end{itemize}
+
+\pause
+
+\begin{itemize}
+\tightlist
 \item
-  Implementation
-\item
-  Termination
-\item
-  Conclusion
+  A \emph{path condition} is a quantifier-free formula in conjunctive
+  normal form which encodes the knowledge about the symbolic values
+  encountered so far that the evaluator has gathered along the way.
 \end{itemize}
 
 \end{frame}
 
 \begin{frame}{%
-\protect\hypertarget{motivation}{%
-Motivation}}
+\protect\hypertarget{combining-the-two-techniques}{%
+Combining the two techniques}}
 
-Sit dicta minima architecto suscipit ratione autem. Similique tempore
-necessitatibus dolore laborum dolorem, rerum! Quo laborum earum deleniti
-asperiores quod a Officiis vel aliquam accusantium blanditiis officiis.
-Veniam dolor reiciendis.
+Combining both techniques into a single evaluation procedure, ie. a
+procedure which partially evaluates a program with symbolic inputs while
+maintaining a path condition, has been shown to yield a much more
+powerful partial evaluator, and to increase both performance and
+reasoning abilities of verifications systems \cite{partialsym}.
 
-\end{frame}
-
-\begin{frame}{%
-\protect\hypertarget{solution}{%
-Solution}}
+We call the result a \emph{symbolic partial evaluation procedure}.
 
 \end{frame}
 
-\begin{frame}{%
+\begin{frame}[fragile]{%
 \protect\hypertarget{implementation}{%
 Implementation}}
 
+\begin{itemize}
+\tightlist
+\item
+  Implemented within Stainless as a new type of evaluator.
+\item
+  Leverages Inox to check for feasability of path under current path
+  condition.
+\item
+  The user must supply the new \texttt{-partial-eval} flag, and annotate
+  the function with the \texttt{@partialEval} annotation.
+\end{itemize}
+
+\end{frame}
+
+\hypertarget{termination}{%
+\section{Termination}\label{termination}}
+
+\begin{frame}{%
+\protect\hypertarget{non-terminating-programs}{%
+Non-terminating programs}}
+
+\begin{itemize}
+\tightlist
+\item
+  When the partial evaluator is invoked over a program that is not
+  provably terminating, there are no guarantees that the evaluation
+  procedure will terminate as well.
+\item
+  If the program is provably non-terminating, then the evaluator will
+  not terminate either. We alleviate this problem by bounding the
+  maximum number of steps the evaluator can take.
+\end{itemize}
+
 \end{frame}
 
 \begin{frame}{%
-\protect\hypertarget{termination}{%
-Termination}}
+\protect\hypertarget{terminating-programs}{%
+Terminating programs}}
+
+We argue that, when ran over a program that Stainless deems terminating,
+the evaluator terminates as well. \vspace{20pt}
+
+\textbf{Note:} The only source of non-termination are calls to recursive
+functions.
+
+\end{frame}
+
+\begin{frame}{%
+\protect\hypertarget{recursive-function-unfolding}{%
+Recursive function unfolding}}
+
+The evaluator only unfolds a function invocation when
+
+\begin{itemize}
+\tightlist
+\item
+  The precondition is satisfied, and:
+\item
+  When any of the following two statement is true:
+
+  \begin{itemize}
+  \tightlist
+  \item
+    The unfolded expression does not contain a recursive call, or:
+  \item
+    It is possible to determine under the current path condition whether
+    the recursive call will be (transitively) reached or not.
+  \end{itemize}
+\end{itemize}
+
+\end{frame}
+
+\begin{frame}[fragile]{%
+\protect\hypertarget{example}{%
+Example}}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\KeywordTok{def} \FunctionTok{tricky}\NormalTok{(n: Int, xs: List[Int]): Int =}
+  \KeywordTok{if}\NormalTok{ (n <= }\DecValTok{0}\NormalTok{) }\DecValTok{0} \KeywordTok{else}\NormalTok{ xs }\KeywordTok{match}\NormalTok{ \{}
+    \KeywordTok{case} \FunctionTok{Nil}\NormalTok{()       => n}
+    \KeywordTok{case} \FunctionTok{Cons}\NormalTok{(x, xs) => x + }\FunctionTok{tricky}\NormalTok{(n, xs)}
+\NormalTok{  \}}
+
+\NormalTok{@partialEval }\KeywordTok{def} \FunctionTok{test1}\NormalTok{(n: Int, xs: List[Int]) = \{}
+  \FunctionTok{require}\NormalTok{(n > }\DecValTok{0}\NormalTok{)}
+  \FunctionTok{tricky}\NormalTok{(n, xs) }\CommentTok{// tricky(n, xs)}
+\NormalTok{\}}
+
+\NormalTok{@partialEval }\KeywordTok{def} \FunctionTok{test2}\NormalTok{(n: Int, xs: List[Int]) = \{}
+  \FunctionTok{require}\NormalTok{(n > }\DecValTok{0}\NormalTok{)}
+  \FunctionTok{tricky}\NormalTok{(n, }\FunctionTok{Cons}\NormalTok{(}\DecValTok{1}\NormalTok{, }\FunctionTok{Cons}\NormalTok{(}\DecValTok{2}\NormalTok{, xs))) }\CommentTok{// 1 + (2 + tricky(n, xs))}
+\NormalTok{\}}
+\end{Highlighting}
+\end{Shaded}
+
+\end{frame}
+
+\begin{frame}{%
+\protect\hypertarget{results}{%
+Results}}
+
+\begin{itemize}
+\tightlist
+\item
+  Reasoning about the result of a tracing interpreter for a simple
+  algebra over a key-value store
+\item
+  Specializing an interpreter for a simple programming language into a
+  compiler from that language to PureScala
+\end{itemize}
 
 \end{frame}
 
@@ -162,34 +633,483 @@ Termination}}
 \protect\hypertarget{conclusion}{%
 Conclusion}}
 
-\end{frame}
-
-\begin{frame}{%
-\protect\hypertarget{verifying-invariants-of-actor-systems}{%
-Verifying Invariants of Actor Systems}}
+The symbolic partial evaluator we have implemented within Stainless:
 
 \begin{itemize}
 \tightlist
 \item
-  Motivation
+  enhances its verification capabilities by allowing the system to
+  reason about programs at a semantic level closer to those of
+  PureScala.
 \item
-  Solution
-\item
-  Implementation
-\item
-  Conclusion
+  allows users to selectively specialize parts of their programs.
 \end{itemize}
 
 \end{frame}
 
 \begin{frame}{%
-\protect\hypertarget{solution-1}{%
-Solution}}
+\protect\hypertarget{further-work}{%
+Further work}}
+
+\begin{block}{Nondeterministic evaluator}
+
+\begin{itemize}
+\tightlist
+\item
+  Implement an evaluator which, when faced with a conditional expression
+  whose condition it is not able to evaluate to a boolean literal, would
+  return a list of expressions resulting from (recursively) evaluating
+  both branches.
+\item
+  Let users splice back the list of results in their programs.
+\end{itemize}
+
+\end{block}
+
+\end{frame}
+
+\hypertarget{verifying-invariants-of-actor-systems}{%
+\section{Verifying Invariants of Actor
+Systems}\label{verifying-invariants-of-actor-systems}}
+
+\begin{frame}{%
+\protect\hypertarget{motivation-1}{%
+Motivation}}
+
+\begin{itemize}
+\tightlist
+\item
+  The actor model is a popular model for building concurrent and
+  distributed programs. Such programs often have invariants that need to
+  be respected at any point in time for the program to be deemed
+  correct.
+\item
+  Akka is the de-facto standard for building actor-based applications in
+  Scala.
+\item
+  We want to describe actor systems in PureScala, then prove that their
+  invariants hold, before running them on top of Akka.
+\end{itemize}
 
 \end{frame}
 
 \begin{frame}{%
+\protect\hypertarget{our-model}{%
+Our model}}
+
+\end{frame}
+
+\begin{frame}[fragile]{%
 \protect\hypertarget{implementation-1}{%
+Implementation}}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\KeywordTok{abstract} \KeywordTok{class}\NormalTok{ Msg}
+\KeywordTok{abstract} \KeywordTok{class}\NormalTok{ ActorRef \{}
+  \KeywordTok{def}\NormalTok{ !(msg: Msg)(}\KeywordTok{implicit}\NormalTok{ ctx: ActorContext): Unit = }\CommentTok{/* ... */}
+\NormalTok{\}}
+
+\KeywordTok{case} \KeywordTok{class} \FunctionTok{Packet}\NormalTok{(dest: ActorRef, payload: Msg)}
+\KeywordTok{case} \KeywordTok{class} \FunctionTok{ActorContext}\NormalTok{( self: ActorRef, }\KeywordTok{var}\NormalTok{ toSend: List[Packet])}
+
+\KeywordTok{abstract} \KeywordTok{class}\NormalTok{ Behavior \{}
+  \KeywordTok{def} \FunctionTok{processMsg}\NormalTok{(msg: Msg)(}\KeywordTok{implicit}\NormalTok{ ctx: ActorContext): Behavior}
+\NormalTok{\}}
+\end{Highlighting}
+\end{Shaded}
+
+\end{frame}
+
+\begin{frame}[fragile]{%
+\protect\hypertarget{implementation-2}{%
+Implementation}}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\KeywordTok{case} \KeywordTok{class} \FunctionTok{ActorSystem}\NormalTok{(}
+\NormalTok{  behaviors: Map[ActorRef, Behavior],}
+\NormalTok{  inboxes: Map[(ActorRef, ActorRef), List[Msg]]}
+\NormalTok{) \{}
+  \KeywordTok{def} \FunctionTok{step}\NormalTok{(from: ActorRef, to: ActorRef): ActorSystem = }\CommentTok{/* ... */}
+\NormalTok{\}}
+\end{Highlighting}
+\end{Shaded}
+
+\end{frame}
+
+\begin{frame}[fragile]{%
+\protect\hypertarget{specifying-an-invariant}{%
+Specifying an invariant}}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\KeywordTok{def} \FunctionTok{inv}\NormalTok{(s: ActorSystem): Boolean = }\CommentTok{/* ... */}
+\end{Highlighting}
+\end{Shaded}
+
+\end{frame}
+
+\begin{frame}{%
+\protect\hypertarget{proving-correctness}{%
+Proving correctness}}
+
+\begin{enumerate}
+[1.]
+\item
+  Invariant initially holds \begin{gather*}
+  \exists\ i: \texttt{ActorSystem}.\ \texttt{inv($i$)} 
+  \end{gather*}
+\item
+  Invariant is preserved between each execution step \begin{gather*}
+  \forall\ s: \texttt{ActorSystem},\, n: \texttt{ActorRef},\, m: \texttt{ActorRef}.\\
+  \texttt{inv($s$)} \implies \texttt{inv($s$.step($n, m$))}
+  \end{gather*}
+\end{enumerate}
+
+\end{frame}
+
+\begin{frame}[fragile]{%
+\protect\hypertarget{proving-correctness-purescala}{%
+Proving correctness (PureScala)}}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\KeywordTok{def}\NormalTok{ initial: ActorSystem = }\CommentTok{/* ... */}
+
+\CommentTok{// 1. Invariant initially holds}
+\KeywordTok{def}\NormalTok{ initialInv = }\FunctionTok{invariant}\NormalTok{(initial).}\FunctionTok{holds}
+
+\CommentTok{// 2. Invariant is preserved between each execution step}
+\KeywordTok{def} \FunctionTok{preserveInv}\NormalTok{(s: ActorSystem, n: ActorRef, m: ActorRef) = \{}
+  \FunctionTok{require}\NormalTok{(}\FunctionTok{inv}\NormalTok{(s))}
+  \FunctionTok{inv}\NormalTok{(s.}\FunctionTok{step}\NormalTok{(n, m))}
+\NormalTok{\} holds}
+\end{Highlighting}
+\end{Shaded}
+
+\end{frame}
+
+\begin{frame}[fragile]{%
+\protect\hypertarget{example-1}{%
+Example}}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\KeywordTok{case} \KeywordTok{class} \FunctionTok{Primary}\NormalTok{() }\KeywordTok{extends}\NormalTok{ ActorRef}
+\KeywordTok{case} \KeywordTok{class} \FunctionTok{Backup}\NormalTok{()  }\KeywordTok{extends}\NormalTok{ ActorRef}
+
+\KeywordTok{case} \KeywordTok{class} \FunctionTok{Inc}\NormalTok{() }\KeywordTok{extends}\NormalTok{ Msg}
+\end{Highlighting}
+\end{Shaded}
+
+\end{frame}
+
+\begin{frame}[fragile]{%
+\protect\hypertarget{example-2}{%
+Example}}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\KeywordTok{case} \KeywordTok{class} \FunctionTok{PrimaryB}\NormalTok{(counter: BigInt) }\KeywordTok{extends}\NormalTok{ Behavior \{}
+  \FunctionTok{require}\NormalTok{(counter >= }\DecValTok{0}\NormalTok{)}
+
+  \KeywordTok{def} \FunctionTok{processMsg}\NormalTok{(msg: Msg)(}\KeywordTok{implicit}\NormalTok{ ctx: ActorContext) =}
+\NormalTok{    msg }\KeywordTok{match}\NormalTok{ \{}
+      \KeywordTok{case} \FunctionTok{Inc}\NormalTok{() =>}
+        \FunctionTok{Backup}\NormalTok{() ! }\FunctionTok{Inc}\NormalTok{()}
+        \FunctionTok{PrimaryB}\NormalTok{(counter + }\DecValTok{1}\NormalTok{)}
+\NormalTok{    \}}
+\NormalTok{\}}
+\end{Highlighting}
+\end{Shaded}
+
+\end{frame}
+
+\begin{frame}[fragile]{%
+\protect\hypertarget{example-3}{%
+Example}}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\KeywordTok{case} \KeywordTok{class} \FunctionTok{BackupB}\NormalTok{(counter: BigInt) }\KeywordTok{extends}\NormalTok{ Behavior \{}
+  \FunctionTok{require}\NormalTok{(counter >= }\DecValTok{0}\NormalTok{)}
+
+  \KeywordTok{def} \FunctionTok{processMsg}\NormalTok{(msg: Msg)(}\KeywordTok{implicit}\NormalTok{ ctx: ActorContext) =}
+\NormalTok{    msg }\KeywordTok{match}\NormalTok{ \{}
+      \KeywordTok{case} \FunctionTok{Inc}\NormalTok{() => }\FunctionTok{BackupB}\NormalTok{(counter + }\DecValTok{1}\NormalTok{)}
+\NormalTok{    \}}
+\NormalTok{\}}
+\end{Highlighting}
+\end{Shaded}
+
+\end{frame}
+
+\begin{frame}[fragile]{%
+\protect\hypertarget{example-4}{%
+Example}}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\KeywordTok{def} \FunctionTok{invariant}\NormalTok{(s: ActorSystem): Boolean = \{}
+\NormalTok{  s.}\FunctionTok{inboxes}\NormalTok{((}\FunctionTok{Backup}\NormalTok{(), }\FunctionTok{Backup}\NormalTok{())).}\FunctionTok{isEmpty}\NormalTok{\textbackslash{}}
+\NormalTok{  &&}
+\NormalTok{  (s.}\FunctionTok{behaviors}\NormalTok{(}\FunctionTok{Primary}\NormalTok{()), s.}\FunctionTok{behaviors}\NormalTok{(}\FunctionTok{Backup}\NormalTok{())) }\KeywordTok{match}\NormalTok{ \{}
+    \KeywordTok{case}\NormalTok{ (}\FunctionTok{PrimaryB}\NormalTok{(p), }\FunctionTok{BackupB}\NormalTok{(b)) =>}
+      \KeywordTok{val}\NormalTok{ pending = s.}\FunctionTok{inboxes}\NormalTok{(}\FunctionTok{Primary}\NormalTok{() -> }\FunctionTok{Backup}\NormalTok{())}
+\NormalTok{      p.}\FunctionTok{value}\NormalTok{ == b.}\FunctionTok{value}\NormalTok{ + pending.}\FunctionTok{length}
+
+    \KeywordTok{case}\NormalTok{ _ => }\KeywordTok{false}
+\NormalTok{  \}}
+\NormalTok{\}}
+\end{Highlighting}
+\end{Shaded}
+
+\end{frame}
+
+\begin{frame}{%
+\protect\hypertarget{dynamic-topologies}{%
+Dynamic topologies}}
+
+We extended the model to handle dynamic topologies as well, where actors
+can spawn other actors.
+
+\end{frame}
+
+\begin{frame}[fragile]{%
+\protect\hypertarget{running-actor-systems-on-akka}{%
+Running actor systems on Akka}}
+
+We provide a shallow shim which allows a user to run an actor system
+built with our framework on top of Akka.
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\KeywordTok{import}\NormalTok{ stainless.}\FunctionTok{actors}\NormalTok{.}\FunctionTok{akkashim}\NormalTok{._}
+
+\KeywordTok{object}\NormalTok{ System }\KeywordTok{extends} \FunctionTok{ActorSystem}\NormalTok{(}\StringTok{"rep-counter-sys"}\NormalTok{) \{}
+  \KeywordTok{def} \FunctionTok{run}\NormalTok{(): Unit = \{}
+    \KeywordTok{val}\NormalTok{ backup = }\FunctionTok{spawn}\NormalTok{(}\FunctionTok{BackupB}\NormalTok{(}\DecValTok{0}\NormalTok{), }\StringTok{"backup"}\NormalTok{)}
+    \KeywordTok{val}\NormalTok{ primary = }\FunctionTok{spawn}\NormalTok{(}\FunctionTok{PrimaryB}\NormalTok{(}\DecValTok{0}\NormalTok{, backup), }\StringTok{"primary"}\NormalTok{)}
+\NormalTok{    primary ! }\FunctionTok{Inc}\NormalTok{()}
+\NormalTok{  \}}
+\NormalTok{\}}
+
+\KeywordTok{def} \FunctionTok{main}\NormalTok{(args: Array[String]): Unit = \{}
+\NormalTok{  System.}\FunctionTok{run}\NormalTok{()}
+\NormalTok{\}}
+\end{Highlighting}
+\end{Shaded}
+
+\end{frame}
+
+\begin{frame}{%
+\protect\hypertarget{conclusion-1}{%
+Conclusion}}
+
+\begin{itemize}
+\tightlist
+\item
+  Developed a simple model for actor systems implemented as a PureScala
+  library.
+\item
+  Modeled a few simple systems with it.
+\item
+  Specified and verified global invariants
+\item
+  Shown how to run these systems on top of a Akka
+\end{itemize}
+
+\end{frame}
+
+\begin{frame}{%
+\protect\hypertarget{further-work-1}{%
+Further work}}
+
+\begin{itemize}
+\tightlist
+\item
+  Model more complex systems
+\item
+  Weaken guarantees on message delivery
+\item
+  Ensure uniqueness of actor names
+\item
+  Take a closer look at the possible interplay with the partial
+  evaluator described in the first part
+\end{itemize}
+
+\end{frame}
+
+\hypertarget{modelling-bi-party-communication-systems-with-linear-types}{%
+\section{Modelling Bi-party Communication Systems with Linear
+Types}\label{modelling-bi-party-communication-systems-with-linear-types}}
+
+\begin{frame}{%
+\protect\hypertarget{motivation-2}{%
+Motivation}}
+
+We want to:
+
+\begin{itemize}
+\tightlist
+\item
+  Model bi-party communication systems which follow a given protocol
+\item
+  Ensure by construction that the implementation properly follows the
+  protocol
+\end{itemize}
+
+\end{frame}
+
+\begin{frame}{%
+\protect\hypertarget{definitions-1}{%
+Definitions}}
+
+\begin{itemize}
+\tightlist
+\item
+  \textbf{Bi-party communication system}: System involving two parties
+  communicating synchronously over a channel with two endpoints, one for
+  sending messages and one for receiving them.
+\item
+  \textbf{Bi-party communication protocol}: Protocol governing such
+  systems.
+\end{itemize}
+
+\end{frame}
+
+\begin{frame}{%
+\protect\hypertarget{session-types}{%
+Session types}}
+
+Session types
+\cite{Honda:1998:LPT:645392.651876, Wadler:2012:PS:2364527.2364568}
+provide a way to encode a protocol in the type system.
+
+The type checker can then both guide and ensure that the implementation
+follows the protocol. Mistakes such as not handling a certain message or
+failing to reply to a message are catched statically.
+
+\end{frame}
+
+\begin{frame}{%
+\protect\hypertarget{session-types-1}{%
+Session types}}
+
+\begin{figure}
+\begin{align*}
+T\quad::=&\quad     S
+   \quad|\quad \texttt{Int}
+   \quad|\quad \texttt{Boolean}
+   \quad|\quad \texttt{String}
+   \quad|\quad \ldots \tag*{payload}
+\\
+S\quad::=&\quad     \,\&\,\{\,l_i: S_i\,\}_{i\in I}         \tag*{branching}\\
+        |&\quad     \oplus\{\,l_i: S_i\,\}_{i\in I}         \tag*{selection}\\
+        |&\quad     ?T.\, S                                 \tag*{receive}\\
+        |&\quad     !T.\, S                                 \tag*{send}\\
+        |&\quad     \mu_X.\, S                              \tag*{recursion}\\
+        |&\quad     X                                       \tag*{variable}\\
+        |&\quad     \epsilon                                \tag*{termination}\\
+\end{align*}
+\vspace{-20pt}
+\caption{Syntax of session types \label{fig:sess-syntax}}
+\end{figure}
+
+\end{frame}
+
+\begin{frame}{%
+\protect\hypertarget{protocol-example}{%
+Protocol example}}
+
+\begin{align*}
+S_A &= \mu\alpha.\,\bigg(!\texttt{Greet}.\,\Big(?\texttt{Hello}.\,\alpha\ \&\ ?\texttt{Bye}.\, \epsilon \Big)\ \oplus\ !\texttt{Quit}.\,\epsilon \bigg)\\
+S_B = \overline{S_A}\footnotemark[1] &= \mu\alpha.\,\bigg(?\texttt{Greet}.\,\Big(!\texttt{Hello}.\,\alpha\ \oplus\ !\texttt{Bye}.\, \epsilon \Big)\ \&\ ?\texttt{Quit}.\,\epsilon \bigg)\\
+\end{align*}
+
+\footnotetext[1]{$\overline{S}$ denotes the \textit{dual} of session type $S$.}
+
+\end{frame}
+
+\begin{frame}{%
+\protect\hypertarget{type-level-encoding-of-session-types}{%
+Type-level encoding of session types}}
+
+Although session types were originally meant to be implemented as a
+separate syntactic category of types and terms to be added to the
+\(\pi\)-calculus, in mainstream languages with sufficiently powerful
+type systems (eg. Haskell, Scala), they are usually encoded using
+graded/indexed monads \cite{st_lin_haskell}.
+
+Unfortunately, Stainless’s type system is currently not powerful enough
+to model such constructs.
+
+\end{frame}
+
+\begin{frame}{%
+\protect\hypertarget{term-level-encoding-of-session-types}{%
+Term-level encoding of session types}}
+
+It has been shown that it possible to encode session types directly in a
+calculus featuring both linear types and variants (sum types)
+\cite{Wadler:2012:PS:2364527.2364568, Dardha:2012:STR:2370776.2370794}.
+
+Despite the lack of linear types in Scala, there already exists such an
+encoding in the form of the \emph{lchannels} library \cite{lchannels}.
+
+\end{frame}
+
+\begin{frame}[fragile]{%
+\protect\hypertarget{term-level-encoding-of-session-types-with-lchannels}{%
+Term-level encoding of session types with \emph{lchannels}}}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\KeywordTok{sealed} \KeywordTok{abstract} \KeywordTok{class}\NormalTok{ AliceBob}
+\KeywordTok{case} \KeywordTok{class} \FunctionTok{Quit}\NormalTok{() }\KeywordTok{extends}\NormalTok{ AliceBob}
+\KeywordTok{case} \KeywordTok{class} \FunctionTok{Greet}\NormalTok{(name: String, cont: Out[Response]) }\KeywordTok{extends}\NormalTok{ AliceBob}
+
+\KeywordTok{sealed} \KeywordTok{abstract} \KeywordTok{class}\NormalTok{ Response}
+\KeywordTok{case} \KeywordTok{class} \FunctionTok{Hello}\NormalTok{(name: String, cont: Out[AliceBob]) }\KeywordTok{extends}\NormalTok{ Response}
+\KeywordTok{case} \KeywordTok{class} \FunctionTok{Bye}\NormalTok{() }\KeywordTok{extends}\NormalTok{ Response}
+\end{Highlighting}
+\end{Shaded}
+
+\end{frame}
+
+\begin{frame}[fragile]
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\KeywordTok{def} \FunctionTok{alice}\NormalTok{(c: Out[AliceBob]) = \{}
+\NormalTok{  c !! }\FunctionTok{Greet}\NormalTok{(}\StringTok{"Eve"}\NormalTok{, _) ? \{}
+    \KeywordTok{case} \FunctionTok{Hello}\NormalTok{(name, cont) =>}
+      \FunctionTok{println}\NormalTok{(s}\StringTok{"Hello, $name"}\NormalTok{)}
+\NormalTok{      cont ! }\FunctionTok{Quit}\NormalTok{() }\CommentTok{// or restart with `alice(cont)`}
+    \KeywordTok{case} \FunctionTok{Bye}\NormalTok{() =>}
+      \FunctionTok{println}\NormalTok{(}\StringTok{"Bye"}\NormalTok{)}
+\NormalTok{  \}}
+\NormalTok{\}}
+\end{Highlighting}
+\end{Shaded}
+
+\end{frame}
+
+\begin{frame}
+
+def bob(c: In{[}AliceBob{]}) = \{ c ? \{ case Greet(name, cont) if name
+== “Eve” =\textgreater{} cont !! Hello(name, \_) case Quit()
+=\textgreater{} c ! Bye() \} \}
+
+As mentioned in the paper, their encoding is sufficient to model any
+session types but, in the absence of linearity, cannot prevent all
+programmer mistakes.
+
+\end{frame}
+
+\begin{frame}{%
+\protect\hypertarget{implementation-3}{%
 Implementation}}
 
 \end{frame}
@@ -201,57 +1121,14 @@ Termination}}
 \end{frame}
 
 \begin{frame}{%
-\protect\hypertarget{conclusion-1}{%
-Conclusion}}
-
-\end{frame}
-
-\begin{frame}{%
-\protect\hypertarget{modelling-bi-party-communication-systems-with-linear-types}{%
-Modelling Bi-party Communication Systems with Linear Types}}
-
-\begin{itemize}
-\tightlist
-\item
-  Motivation
-\item
-  Solution
-\item
-  Implementation
-\item
-  Conclusion
-\end{itemize}
-
-\end{frame}
-
-\begin{frame}{%
-\protect\hypertarget{solution-2}{%
-Solution}}
-
-\end{frame}
-
-\begin{frame}{%
-\protect\hypertarget{implementation-2}{%
-Implementation}}
-
-\end{frame}
-
-\begin{frame}{%
-\protect\hypertarget{termination-2}{%
-Termination}}
-
-\end{frame}
-
-\begin{frame}{%
 \protect\hypertarget{conclusion-2}{%
 Conclusion}}
 
 \end{frame}
 
-\begin{frame}[allowframebreaks]{%
-\protect\hypertarget{references}{%
-References}}
-
+\begin{frame}[allowframebreaks]{References}
+\bibliographytrue
+\printbibliography[heading=none]
 \end{frame}
 
 \end{document}

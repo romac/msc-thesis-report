@@ -7,3 +7,11 @@
 *.fls
 *.out
 *.toc
+*.vrb
+*.bcv
+*.bcf
+*.bbl
+*.vrb
+*.gz
+*.xml
+*.blg
