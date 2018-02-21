@@ -1727,7 +1727,7 @@ behaviors of the actors to be spawned, and provides a \stt{spawn} method which i
 
 \RefCode{lst:spawncode} defines a simple system with a dynamic topology, where one actor named \stt{Primary} waits for a \stt{Spawn} message to spawn a child actor, and change its behavior from \stt{BeforeB} to \stt{AfterB} in order to keep track of the reference to the child. The invariant we would to verify holds here, states that, if the \stt{Primary} actor has behavior \stt{BeforeB()}, then the behavior associated with the \ActorRef of its child actor must be \stt{Stopped}. On the other hand, if the \stt{Primary} actor has behavior \stt{AfterB(child)}, then the behavior associated with \stt{child} must be \stt{ChildB}.
 
-\begin{Code}{PureScala}{lst:spawncode}{}
+\begin{Code}{PureScala}{lst:spawncode}{Actor system with a dynamic topology}
 case object Primary extends ActorRef("primary")
 case object Spawn extends Msg
 
@@ -2014,7 +2014,7 @@ The astute reader will have noticed that the presence of the \stt{!}\,operator, 
 
 \subsubsection{Preventing Contraction}
 
-Because linear logic does not allow contraction, we must also ensure that no linear term is \textit{dropped}, that is to say, that it is \textit{consumed} at least once. To this end, we first collect all linear variables being introduced in a function definition, for example as a parameter to the function, in a variable binding, or within a pattern in a \texttt{clause} (even as a wildcard). Then, after having ran the type-checking algorithm described in the previous section, we can make use of the resulting \textit{usage context} $\Delta$ to check whether each and every of those variable has indeed been \textit{consumed} at some point, and reject the program otherwise.
+Because linear logic does not allow contraction, we must also ensure that no linear term is \textit{dropped}, that is to say, that it is \textit{consumed} at least once. To this end, we first collect all linear variables being introduced in a function definition, for example as a parameter to the function, in a variable binding, or within a pattern (even as a wildcard). Then, after having ran the type-checking algorithm described in the previous section, we can make use of the resulting \textit{usage context} $\Delta$ to check whether each and every of those variable has indeed been \textit{consumed} at some point, and reject the program otherwise.
 
 \subsubsection{Linear Terms in Contracts}
 
