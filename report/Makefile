@@ -1,9 +1,14 @@
+.PHONY: all clean
 
-all: report.pdf
+MAIN   = report.tex
+OUTPUT = report.pdf
+DEPS   = $(MAIN) lstscala.sty report.bib res/epfl-logo.pdf
 
-report.pdf: report.tex lstscala.sty report.bib res/epfl-logo.pdf
-	tectonic $^
+all: $(OUTPUT)
+
+$(OUTPUT): $(DEPS)
+	tectonic $(MAIN)
 
 clean:
-	$(RM) report.pdf
+	$(RM) $(OUTPUT)
 

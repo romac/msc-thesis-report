@@ -632,11 +632,11 @@ When encountering a conditional expression $E = \stt{if ($c$) $t$ else $e$}$, un
 \item If $c'$ is not a literal, it evaluates both branches under their respective path conditions. We denote the result of their evaluation respectively by $t'$ and $e'$. It then returns the expression \stt{if ($c'$) $t'$ else $e'$}.
 \end{enumerate}
 
-This procedure is formalized in rules 10, 11, and 12 of \RefFig{symbolicsem}.
+This procedure is formalized in rules 10, 11, and 12 of \RefFig{fig:symbolicsem}.
 
 \subsubsection*{Evaluation of pattern matches}
 
-Pattern matches are converted to an equivalent conditional expression with explicit type checks, casts, and field accesses, before being fed back to the evaluator. The corresponding rule (21) can be found in \RefFig{symbolicsem}.
+Pattern matches are converted to an equivalent conditional expression with explicit type checks, casts, and field accesses, before being fed back to the evaluator. The corresponding rule (21) can be found in \RefFig{fig:symbolicsem}.
 
 \subsubsection*{Evaluation of function invocations}
 
@@ -666,7 +666,7 @@ In other words, we only want to unfold an invocation to a recursive function if 
 \item If the function invocation cannot be productively unfolded, the evaluator stops there and replace the original arguments to the invocation by their counterpart computed in step 1.
 \end{enumerate}
 
-The corresponding rules (\ref{fig:symbolicsem:fi1}, \ref{fig:symbolicsem:fi2}, and \ref{fig:symbolicsem:fi3}) can be found in \RefFig{symbolicsem}.
+The corresponding rules (\ref{fig:symbolicsem:fi1}, \ref{fig:symbolicsem:fi2}, and \ref{fig:symbolicsem:fi3}) can be found in \RefFig{fig:symbolicsem}.
 
 \begin{figure}[htb]
 \begin{framed}
@@ -1059,18 +1059,6 @@ trace.take(3) == Get("foo") :: Put("toto", "tata") :: Put("foo", "bar") :: Nil()
 \end{Code}
 
 \begin{Code}{PureScala}{lst:symkvstoreinv}{Example program}
-def insert(kvs: List[(String, String)])(after: Op): Op = kvs match {
-  case Nil() => after
-  case Cons((k, v), rest) => put(k, v) { () => insert(rest)(after) }
-}
-
-val xs = List("foo" -> "bar", "toto" -> "tata")
-val program = insert(xs) {
-  get("foo") { foo =>
-    pure(foo)
-  }
-}
-
 @partialEval
 def result(map: Map[String, String], init: List[Label], fuel: BigInt) = {
   require(fuel > 10)
@@ -1194,12 +1182,12 @@ val program: Expr = Mul(Num(10), Add(Var("x"), Rand(Num(42))))
 @partialEval
 def compiled(ctx: Context): Int = {
   require(ctx contains "x")
-  interpret(program, ctx).get.            // 10 * (ctx("x") + random(42))
+  interpret(program, ctx).get             // 10 * (ctx("x") + random(42))
 }
 
 @partialEval
 def test(y: Int) = {
-  val ctx = Context(Map("y" -> Num(y)))
+  val ctx = Context(List("y" -> Num(y)))
   interpret(program, ctx)                 // Left(Error("Unbound variable: x"))
 } ensuring { _.isLeft }
 \end{Code}
@@ -2318,6 +2306,8 @@ def menu(card: String)(menu: Linear[Menu]): Unit = {
 %\subsubsection{TLS 1.2 Handshake}
 %
 %\footnote{The Transport Layer Security (TLS) Protocol - Version 1.2: \url{https://www.ietf.org/rfc/rfc5246.txt}}
+
+\pagebreak
 
 \subsection{Conclusion}
 
